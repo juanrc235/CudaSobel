@@ -2,6 +2,8 @@
 #include <iostream>
 
 using namespace cv;
+//Mat kernelX = { {-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1} };
+//Mat kernelY = { {-1, -2, -1}, {0, 0, 0}, {1, 2, 1} };
 
 Mat sobel_opencv(Mat img) {
     Mat src, src_gray, grad_x, grad_y, abs_grad_x, abs_grad_y, grad;
@@ -26,6 +28,50 @@ Mat sobel_opencv(Mat img) {
 
     return grad;
 }
+
+/* *
+ * 
+ * Basic convolution on cpu
+ * 
+ * IN: img -> grayscale image // kernel -> image kernel to apply
+ * OUT: dst_img -> output imgae
+ * 
+
+Mat conv_cpu (Mat img, Mat kernel) {
+
+    char KERNEL_DIM = kernel.row;
+    char DESP = KERNEL_DIM/2;
+    Mat dst_img = Mat( img.rows, img.cols, CV_64FC3, CV_RGB(0,0,0) );
+
+    for (int x = 0; x < img.rows; x++) {
+        for (int y = 0; y < img.cols; y++) {
+            
+            for  (char i = -DESP; i < KERNEL_DIM - DESP; i++) {
+				for (char j = -DESP; j < KERNEL_DIM - DESP; j++) {
+					tmpX += img.at<Vec3d>(x+1,y+1) * kernelX[i + DESP][j + DESP];
+				}
+			}
+
+            
+
+        }
+    }
+
+    return dst_img;
+}
+
+Mat sobel_cpu (Mat img) {
+
+    
+
+}
+
+void mat2matrix (Mat img) {
+
+    
+
+}
+ * */
 
 int main() {
 
