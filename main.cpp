@@ -1,5 +1,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <vector>
+#include <string>
 
 using namespace cv;
 //Mat kernelX = { {-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1} };
@@ -65,13 +67,74 @@ Mat sobel_cpu (Mat img) {
     
 
 }
-
-void mat2matrix (Mat img) {
-
-    
-
-}
  * */
+
+std::string type2str(int type) {
+    std::string r;
+
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+    switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+    }
+
+    r += "C";
+    r += (chans+'0');
+
+    return r;
+}
+
+/**
+ * openCV Mat object to std::vector.
+ * 
+ * The img is in grayscale.
+ *
+ * @param img the Mat object.
+ * @return the vector.
+ */
+std::vector<uchar> mat2vector (Mat img) {
+
+    std::vector<uint8_t> array(img.rows*img.cols);
+
+    uint8_t* pixelPtr = (uint8_t*)img.data;
+    int cn = img.channels();
+
+    for(int i = 0; i < img.rows; ++i) {
+        for(int j = 0; j < img.cols; ++j) {
+            array.at(img.cols*i + j) = ( pixelPtr[i*img.cols*cn + j*cn + 0] +  
+                                         pixelPtr[i*img.cols*cn + j*cn + 1] + 
+                                         pixelPtr[i*img.cols*cn + j*cn + 2] ) / 3;
+        }
+    }
+
+    return array;
+}
+
+/**
+ * std::vector to openCV Mat object.
+ *  
+ * @param array the std::vector.
+ * @return the Mat object.
+ */
+Mat vector2mat (std::vector<uchar> img, int row, int col) {
+
+    Mat img_m(col, row, CV_8UC1);
+  
+    for(int i = 0; i < row; ++i) {
+        for(int j = 0; j < col; ++j) {
+            img_m.at<uint8_t>(i, j) = img.at(col*i + j);
+        }
+    }
+    return img_m;
+}
 
 int main() {
 
@@ -83,12 +146,19 @@ int main() {
     }
     //resize(img, img, Size(img.cols*0.40f, img.rows*0.40f));
 
-    printf("Resolution: %dx%d\n", img.cols, img.rows);
+    Mat img_gray;
+    
+    std::vector<uint8_t> v;
+    v = mat2vector(img);    
+    Mat img2 = vector2mat(v, img.rows, img.cols);
+
+    printf("Resolution: %dx%d\n", img.rows, img.cols);
 
     Mat sobel_img = sobel_opencv(img);
 
     imshow("Original Image", img );
     imshow("Sobel Image", sobel_img);
+    imshow("f Image", img2);
     waitKey(0); 
 
     //imwrite("starry_night.png", img);
