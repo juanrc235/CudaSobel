@@ -126,7 +126,7 @@ std::vector<uchar> mat2vector (Mat img) {
  */
 Mat vector2mat (std::vector<uchar> img, int row, int col) {
 
-    Mat img_m(col, row, CV_8UC1);
+    Mat img_m(row, col, CV_8UC1);
   
     for(int i = 0; i < row; ++i) {
         for(int j = 0; j < col; ++j) {
@@ -152,7 +152,8 @@ int main() {
     v = mat2vector(img);    
     Mat img2 = vector2mat(v, img.rows, img.cols);
 
-    printf("Resolution: %dx%d\n", img.rows, img.cols);
+    printf("Resolution: rows:%d cols:%d\n", img.rows, img.cols);
+    printf("Resolution: rows:%d cols:%d\n", img2.rows, img2.cols);
 
     Mat sobel_img = sobel_opencv(img);
 
