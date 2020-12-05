@@ -4,7 +4,7 @@
 #include <string>
 
 using namespace cv;
-//Mat kernelX = { {-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1} };
+int8_t kernel[3][3] = { {1, 0, -1}, {0, 0, 0}, {-1, 0, 1} };
 //Mat kernelY = { {-1, -2, -1}, {0, 0, 0}, {1, 2, 1} };
 
 Mat sobel_opencv(Mat img) {
@@ -38,36 +38,34 @@ Mat sobel_opencv(Mat img) {
  * IN: img -> grayscale image // kernel -> image kernel to apply
  * OUT: dst_img -> output imgae
  * 
+ * */
+std::vector<uchar> conv_cpu (std::vector<uchar> img, int8_t kernel[3][3], int row, int col) {
 
-Mat conv_cpu (Mat img, Mat kernel) {
-
-    char KERNEL_DIM = kernel.row;
+    char KERNEL_DIM = 3;
     char DESP = KERNEL_DIM/2;
-    Mat dst_img = Mat( img.rows, img.cols, CV_64FC3, CV_RGB(0,0,0) );
+    std::vector<uchar> dst_img(row*col);
+    int tmp = 0;
 
-    for (int x = 0; x < img.rows; x++) {
-        for (int y = 0; y < img.cols; y++) {
+    for (int x = 1; x < row - 1; x++) {
+        for (int y = 1; y < col - 1; y++) {
             
             for  (char i = -DESP; i < KERNEL_DIM - DESP; i++) {
 				for (char j = -DESP; j < KERNEL_DIM - DESP; j++) {
-					tmpX += img.at<Vec3d>(x+1,y+1) * kernelX[i + DESP][j + DESP];
+
+					tmp += img.at(col*(x + i) + (y + j) ) * kernel[i + DESP][j + DESP];
+
 				}
 			}
+           
+    	    if ( tmp < 0 ) tmp = 0b0;
+	        if ( tmp > 255 ) tmp = 0b10000000;        
 
-            
-
+            dst_img.at(col*x + y) = (uchar) tmp;
         }
     }
 
     return dst_img;
 }
-
-Mat sobel_cpu (Mat img) {
-
-    
-
-}
- * */
 
 std::string type2str(int type) {
     std::string r;
@@ -102,9 +100,9 @@ std::string type2str(int type) {
  */
 std::vector<uchar> mat2vector (Mat img) {
 
-    std::vector<uint8_t> array(img.rows*img.cols);
+    std::vector<uchar> array(img.rows*img.cols);
 
-    uint8_t* pixelPtr = (uint8_t*)img.data;
+    uchar* pixelPtr = (uchar*)img.data;
     int cn = img.channels();
 
     for(int i = 0; i < img.rows; ++i) {
@@ -148,18 +146,21 @@ int main() {
 
     Mat img_gray;
     
-    std::vector<uint8_t> v;
-    v = mat2vector(img);    
-    Mat img2 = vector2mat(v, img.rows, img.cols);
+    std::vector<uint8_t> v, v2;
+    v = mat2vector(img);  
 
-    printf("Resolution: rows:%d cols:%d\n", img.rows, img.cols);
-    printf("Resolution: rows:%d cols:%d\n", img2.rows, img2.cols);
+    v2 = conv_cpu(v, kernel, img.rows, img.cols);
+
+    Mat img2 = vector2mat(v2, img.rows, img.cols);
+
+    printf("img Resolution: rows:%d cols:%d\n", img.rows, img.cols);
+    printf("im2 Resolution: rows:%d cols:%d\n", img2.rows, img2.cols);
 
     Mat sobel_img = sobel_opencv(img);
 
-    imshow("Original Image", img );
-    imshow("Sobel Image", sobel_img);
-    imshow("f Image", img2);
+    //imshow("Original Image", img );
+    imshow("Sobel OpenCV", sobel_img);
+    imshow("Sobel CPU", img2);
     waitKey(0); 
 
     //imwrite("starry_night.png", img);
