@@ -4,6 +4,7 @@
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
+extern "C" void kernel_wrapper();
 
 vector<vector<uchar>> mat2array (Mat img) {
 
@@ -37,6 +38,8 @@ Mat array2mat ( vector<vector<uchar>> array_img, int row, int col) {
 
 int main() {
 
+    kernel_wrapper();
+
     VideoCapture cap(0); 
     char c;
    
@@ -57,7 +60,7 @@ int main() {
             break;
         }
 
-        imshow( "SOBEL" , sobel_gpu(frame) );
+        imshow( "SOBEL" , sobel_opencv(frame) );
 
         if((char)waitKey(25) == 27) {
              break;
@@ -104,8 +107,7 @@ Mat sobel_gpu (Mat src_img) {
 
    Mat dst_img(src_img.rows, src_img.cols, CV_8UC1);
 
-    my_cuda_func();
-
+    
 
    return dst_img;
 }

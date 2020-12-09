@@ -3,7 +3,7 @@
 #include "wrapper.h"
 
 __global__ void kernel() {
-
+  
 }
 
 inline 
@@ -14,8 +14,10 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
   }
 }
 
-void my_cuda_func(){
-    kernel<<<1,1>>>();
+extern "C" void kernel_wrapper(){
+
+    kernel<<<1, 1>>>();
     printf("##################################\n");
+    
     cudaDeviceSynchronize();
 }

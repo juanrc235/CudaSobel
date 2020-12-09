@@ -1,1 +1,2 @@
-void my_cuda_func();
+
+extern "C" void my_cuda_func();
