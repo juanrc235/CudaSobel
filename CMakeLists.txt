@@ -12,7 +12,7 @@ IF(CUDA_FOUND)
 ENDIF()
 
 include_directories(${OpenCV_INCLUDE_DIRS})
-set(SOURCES main.cpp defines.hpp)
+set(SOURCES main.cpp defines.h wrapper.h)
 add_executable(main ${SOURCES})
 
 target_link_libraries(main CudaKernels ${OpenCV_LIBS})

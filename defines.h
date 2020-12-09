@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 
+
 #define KERNEL_DIM 3
 
 using namespace cv;
@@ -19,4 +20,3 @@ int kernel_sy[KERNEL_DIM][KERNEL_DIM] = { {1, 2, 1},
                                           {0, 0, 0}, 
                                           {-1, -2, -1} };
 
-Mat sobel_opencv(Mat img);
