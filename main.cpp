@@ -1,47 +1,46 @@
-#include "defines.h"
-#include "wrapper.h"
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <string>
+#include <cmath>
+#include <vector>
+
+using namespace cv;
+using namespace std;
 
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
-extern "C" void kernel_wrapper();
+void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
-vector<vector<uchar>> mat2array (Mat img) {
-
-    vector<vector<uchar>> array_img; 
-    array_img.resize(img.rows, vector<uchar>(img.cols, 0) );
+void mat2array (Mat img, unsigned char *array_img) {
 
     for(int i = 0; i < img.rows; ++i) {
         for(int j = 0; j < img.cols; ++j) {
-            array_img[i][j] = ( img.at<Vec3b>(i, j)[0] + 
-                                img.at<Vec3b>(i, j)[0] + 
-                                img.at<Vec3b>(i, j)[0] ) /3 ;
+            array_img[i*img.cols + j] = ( img.at<Vec3b>(i, j)[0] + 
+                                          img.at<Vec3b>(i, j)[0] + 
+                                          img.at<Vec3b>(i, j)[0] ) /3 ;
         }
     }
-
-    return array_img;
 }
 
 
-Mat array2mat ( vector<vector<uchar>> array_img, int row, int col) {
+Mat array2mat ( unsigned char array_img[], int row, int col) {
 
     Mat img_m(row, col, CV_8UC1);
   
     for(int i = 0; i < row; ++i) {
         for(int j = 0; j < col; ++j) {
-            img_m.at<uchar>(i, j) = array_img[i][j];
+            img_m.at<uchar>(i, j) = array_img[i*col + j];
         }
     }
 
     return img_m;
 }
 
+
 int main() {
 
-    kernel_wrapper();
-
     VideoCapture cap(0); 
-    char c;
    
     // Check if camera opened successfully
     if(!cap.isOpened()){
@@ -60,21 +59,18 @@ int main() {
             break;
         }
 
-        imshow( "SOBEL" , sobel_opencv(frame) );
+        imshow( "SOBEL" , sobel_gpu(frame) );
 
         if((char)waitKey(25) == 27) {
-             break;
+            break;
         }
        
     }
     
-    // When everything done, release the video capture object
+    // free resources
     cap.release();
-
-    // Closes all the frames
     destroyAllWindows();
 
-   
     return 0;
 }
 
@@ -105,9 +101,12 @@ Mat sobel_opencv(Mat img) {
 
 Mat sobel_gpu (Mat src_img) {
 
-   Mat dst_img(src_img.rows, src_img.cols, CV_8UC1);
+   unsigned char dst_array[src_img.cols*src_img.rows];
+   unsigned char src_array[src_img.cols*src_img.rows];
 
-    
+   mat2array(src_img, src_array);
 
-   return dst_img;
+   kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
+
+   return array2mat(src_array, src_img.rows, src_img.cols);
 }

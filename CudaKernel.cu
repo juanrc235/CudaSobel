@@ -1,10 +1,6 @@
 #include <assert.h>
 #include <iostream>
-#include "wrapper.h"
-
-__global__ void kernel() {
-  
-}
+#include "defines.h"
 
 inline 
 void check(cudaError_t salidafuncapi, const char* nombrefunc) {
@@ -14,10 +10,12 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
   }
 }
 
-extern "C" void kernel_wrapper(){
 
-    kernel<<<1, 1>>>();
-    printf("##################################\n");
-    
-    cudaDeviceSynchronize();
+__global__ void kernel_conv(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
+  
+}
+
+void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
+  
+  cudaDeviceSynchronize();
 }
