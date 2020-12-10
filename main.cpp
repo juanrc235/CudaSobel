@@ -10,6 +10,7 @@ using namespace std;
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
+void gpu_stats ();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
 void mat2array (Mat img, unsigned char *array_img) {
@@ -40,6 +41,8 @@ Mat array2mat ( unsigned char array_img[], int row, int col) {
 
 int main() {
 
+    gpu_stats();
+
     VideoCapture cap(0); 
    
     // Check if camera opened successfully
@@ -59,7 +62,8 @@ int main() {
             break;
         }
 
-        imshow( "SOBEL" , sobel_gpu(frame) );
+        imshow( "SOBEL OPENCV", sobel_opencv(frame));
+        imshow( "SOBEL GPU", sobel_gpu(frame));
 
         if((char)waitKey(25) == 27) {
             break;
@@ -108,5 +112,5 @@ Mat sobel_gpu (Mat src_img) {
 
    kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
 
-   return array2mat(src_array, src_img.rows, src_img.cols);
+   return array2mat(dst_array, src_img.rows, src_img.cols);
 }
