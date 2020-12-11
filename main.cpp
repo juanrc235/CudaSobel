@@ -41,8 +41,6 @@ Mat array2mat ( unsigned char array_img[], int row, int col) {
 
 int main() {
 
-    gpu_stats();
-
     VideoCapture cap(0); 
    
     // Check if camera opened successfully

@@ -1,6 +1,9 @@
 #include <assert.h>
 #include <iostream>
+#include <math.h>
 #include "defines.h"
+
+#define GRIDVAL 20.0
 
 inline 
 void check(cudaError_t salidafuncapi, const char* nombrefunc) {
@@ -11,8 +14,10 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
 }
 
 
-__global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int cols, int rows) {
-  
+__global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
+  int x = threadIdx.x + blockIdx.x * blockDim.x;
+  int y = threadIdx.y + blockIdx.y * blockDim.y;
+  dst_img[y*width + x] = 0;
 }
 
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
@@ -42,8 +47,15 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
 
+  dim3 tpb(GRIDVAL, GRIDVAL, 1);
+  dim3 nBlocks(ceil(cols/GRIDVAL), ceil(rows/GRIDVAL), 1);
+
   // kernel call
-  kernel_conv <<<1, 1>>> (src_dev_img, dst_dev_img, cols, rows);
+  kernel_conv <<<1, 32>>> (src_dev_img, dst_dev_img, cols, rows);
+  ret = cudaGetLastError();
+  if ( ret != cudaSuccess ) {
+    printf("kernel error: %s\n", cudaGetErrorString(ret));
+  }
 
   // copy the result device --> host
   ret = cudaMemcpy(dst_img, dst_dev_img, size, cudaMemcpyDeviceToHost);
@@ -54,30 +66,4 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   // free device memory
   cudaFree(src_dev_img);
   cudaFree(dst_dev_img);
-}
-
-void gpu_stats () {
-
-  cudaDeviceProp prop;
-  cudaGetDeviceProperties(&prop, 0);
-  printf("Device name: %s\n", prop.name);
-  printf("Memory Clock Rate (KHz): %d\n", prop.memoryClockRate);
-  printf("Memory Bus Width (bits): %d\n", prop.memoryBusWidth);
-  printf("Peak Memory Bandwidth (GB/s): %f\n", 2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
-  int cores = prop.multiProcessorCount;
-  switch (prop.major) {
-    case 2: // Fermi
-      if (prop.minor == 1) cores *= 48;
-      else cores *= 32; break;
-    case 3: // Kepler
-      cores *= 192; break;
-    case 5: // Maxwell
-      cores *= 128; break;
-    case 6: // Pascal
-      if (prop.minor == 1) cores *= 128;
-      else if (prop.minor == 0) cores *= 64;
-      break;
-  }
-  printf("CUDA cores: %d \n", cores);
-
 }
