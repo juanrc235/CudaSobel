@@ -46,12 +46,9 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   if ( ret != cudaSuccess ) {
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
-
-  dim3 tpb(GRIDVAL, GRIDVAL, 1);
-  dim3 nBlocks(ceil(cols/GRIDVAL), ceil(rows/GRIDVAL), 1);
-
+  
   // kernel call
-  kernel_conv <<<1, 32>>> (src_dev_img, dst_dev_img, cols, rows);
+  kernel_conv <<<cols, rows>>> (src_dev_img, dst_dev_img, cols, rows);
   ret = cudaGetLastError();
   if ( ret != cudaSuccess ) {
     printf("kernel error: %s\n", cudaGetErrorString(ret));
