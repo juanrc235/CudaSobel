@@ -12,6 +12,7 @@ using namespace std;
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
+Mat sobel_cpu (Mat src_img);
 void gpu_stats ();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
@@ -28,7 +29,7 @@ __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int 
   int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
     float dx, dy;
-    if( x > 0 && y > 0 && x < width-1 && y < height-1) {
+    if( x > 0 && y > 0 && x < width-1 && y < height-1) { // avoid edges
         dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
              (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
         dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
@@ -135,6 +136,7 @@ int main() {
 
         imshow( "SOBEL OPENCV", sobel_opencv(frame));
         imshow( "SOBEL GPU", sobel_gpu(frame));
+        imshow( "SOBEL CPU", sobel_cpu(frame));
 
         if((char)waitKey(25) == 27) {
             break;
@@ -184,4 +186,34 @@ Mat sobel_gpu (Mat src_img) {
    kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
 
    return array2mat(dst_array, src_img.rows, src_img.cols);
+}
+
+Mat sobel_cpu (Mat src_img) {
+
+  unsigned char dst_array[src_img.cols*src_img.rows];
+  unsigned char src_array[src_img.cols*src_img.rows];
+
+  mat2array(src_img, src_array);
+
+  int width = src_img.cols;
+  int height = src_img.rows;
+
+  float dx, dy;
+
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+
+      dx = 0; dy = 0;
+      for (int x = -1; x < KERNEL_DIM - 1; x++) {
+        for (int y = -1; y < KERNEL_DIM - 1; y++) {
+            dx += src_array[(i + x)*width + j + y] * kernel_sx[x + 1][y + 1];
+            dy += src_array[(i + x)*width + j + y] * kernel_sy[x + 1][y + 1];
+        }
+      }
+
+      dst_array[i*width + j] = sqrt( (dx*dx) + (dy*dy) );
+    }
+  }
+
+  return array2mat(dst_array, src_img.rows, src_img.cols);
 }
