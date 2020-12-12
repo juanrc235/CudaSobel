@@ -3,6 +3,8 @@
 #include <string>
 #include <cmath>
 #include <vector>
+#include <assert.h>
+#include "defines.h"
 
 using namespace cv;
 using namespace std;
@@ -12,6 +14,64 @@ Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 void gpu_stats ();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
+
+inline 
+void check(cudaError_t salidafuncapi, const char* nombrefunc) {
+  if (salidafuncapi != cudaSuccess) {
+    printf("Error %s (en la llamada a %s)\n", cudaGetErrorString(salidafuncapi),nombrefunc);
+    assert(salidafuncapi == cudaSuccess);
+  }
+}
+
+
+__global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
+  int x = threadIdx.x + blockIdx.x * blockDim.x;
+  int y = threadIdx.y + blockIdx.y * blockDim.y;
+  dst_img[y*width + x] = 0;
+}
+
+void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
+
+  cudaError_t ret;
+  int elements = rows*cols;
+  int size = elements*sizeof(unsigned char);
+  unsigned char *src_dev_img, *dst_dev_img;
+
+  // allocate device memory
+  ret = cudaMalloc((void**)&src_dev_img, size);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [src_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  ret = cudaMalloc((void**)&dst_dev_img, size);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [dst_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the data host --> device
+  ret = cudaMemcpy(src_dev_img, src_img, size, cudaMemcpyHostToDevice);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
+  }
+  
+  // kernel call
+  kernel_conv <<<cols, rows>>> (src_dev_img, dst_dev_img, cols, rows);
+  ret = cudaGetLastError();
+  if ( ret != cudaSuccess ) {
+    printf("kernel error: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the result device --> host
+  ret = cudaMemcpy(dst_img, dst_dev_img, size, cudaMemcpyDeviceToHost);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() D -> H error: %s\n", cudaGetErrorString(ret));
+  }
+  
+  // free device memory
+  cudaFree(src_dev_img);
+  cudaFree(dst_dev_img);
+}
+
 
 void mat2array (Mat img, unsigned char *array_img) {
 
@@ -41,6 +101,9 @@ Mat array2mat ( unsigned char array_img[], int row, int col) {
 
 int main() {
 
+    // create context
+    cudaFree(0); 
+
     VideoCapture cap(0); 
    
     // Check if camera opened successfully
@@ -60,7 +123,7 @@ int main() {
             break;
         }
 
-        imshow( "SOBEL OPENCV", sobel_opencv(frame));
+        //imshow( "SOBEL OPENCV", sobel_opencv(frame));
         imshow( "SOBEL GPU", sobel_gpu(frame));
 
         if((char)waitKey(25) == 27) {
