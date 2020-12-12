@@ -26,8 +26,15 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
 
 __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
   int x = threadIdx.x + blockIdx.x * blockDim.x;
-  int y = threadIdx.y + blockIdx.y * blockDim.y;
-  dst_img[y*width + x] = 0;
+    int y = threadIdx.y + blockIdx.y * blockDim.y;
+    float dx, dy;
+    if( x > 0 && y > 0 && x < width-1 && y < height-1) {
+        dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
+             (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
+        dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
+             (-1* src_img[(y+1)*width + (x-1)]) + (-2*src_img[(y+1)*width+x]) + (-1*src_img[(y+1)*width+(x+1)]);
+        dst_img[y*width + x] = sqrt( (dx*dx) + (dy*dy) );
+    }
 }
 
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
@@ -54,8 +61,11 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
   
+  dim3 threadsPerBlock(20.0, 20.0, 1);
+  dim3 numBlocks(ceil(rows/20.0), ceil(cols/20.0), 1);
+
   // kernel call
-  kernel_conv <<<cols, rows>>> (src_dev_img, dst_dev_img, cols, rows);
+  kernel_conv <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
   ret = cudaGetLastError();
   if ( ret != cudaSuccess ) {
     printf("kernel error: %s\n", cudaGetErrorString(ret));
@@ -123,7 +133,7 @@ int main() {
             break;
         }
 
-        //imshow( "SOBEL OPENCV", sobel_opencv(frame));
+        imshow( "SOBEL OPENCV", sobel_opencv(frame));
         imshow( "SOBEL GPU", sobel_gpu(frame));
 
         if((char)waitKey(25) == 27) {
@@ -151,7 +161,7 @@ Mat sobel_opencv(Mat img) {
     GaussianBlur(img, src, Size(3, 3), 0, 0, BORDER_DEFAULT);
 
     // to gray scale
-    cvtColor(src, src_gray, COLOR_BGR2GRAY);
+    cvtColor(img, src_gray, COLOR_BGR2GRAY);
 
     Sobel(src_gray, grad_x, ddepth, 1, 0, ksize, scale, delta, BORDER_DEFAULT);
     Sobel(src_gray, grad_y, ddepth, 0, 1, ksize, scale, delta, BORDER_DEFAULT);
