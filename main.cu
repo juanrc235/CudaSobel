@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <assert.h>
+#include <chrono>
 #include "defines.h"
 
 using namespace cv;
@@ -13,7 +14,7 @@ using namespace std;
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
-void gpu_stats ();
+void performance();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
 inline 
@@ -26,16 +27,22 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
 
 
 __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
-  int x = threadIdx.x + blockIdx.x * blockDim.x;
+
+    int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
+
     float dx, dy;
     if( x > 0 && y > 0 && x < width-1 && y < height-1) { // avoid edges
+
         dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
              (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
+
         dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
              (-1* src_img[(y+1)*width + (x-1)]) + (-2*src_img[(y+1)*width+x]) + (-1*src_img[(y+1)*width+(x+1)]);
+
         dst_img[y*width + x] = sqrt( (dx*dx) + (dy*dy) );
     }
+
 }
 
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
@@ -114,6 +121,8 @@ int main() {
 
     // create context
     cudaFree(0); 
+
+    performance();
 
     VideoCapture cap(0); 
    
@@ -216,4 +225,29 @@ Mat sobel_cpu (Mat src_img) {
   }
 
   return array2mat(dst_array, src_img.rows, src_img.cols);
+}
+
+void performance() {
+
+  Mat img = imread("cap.jpg", 0);
+  if (img.empty()) {
+    cout << "Error opening the file" << endl;
+  }
+
+  auto start = chrono::system_clock::now();
+  sobel_cpu(img);
+  auto end = chrono::system_clock::now();
+  
+  std::chrono::duration<double> elapsed_seconds = end-start;
+
+  cout << "[CPU] time: " << elapsed_seconds.count() << "s\n";
+
+  start = chrono::system_clock::now();
+  sobel_gpu(img);
+  end = chrono::system_clock::now();
+  
+  elapsed_seconds = end-start;
+  
+  cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
+
 }
