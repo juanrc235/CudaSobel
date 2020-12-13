@@ -5,6 +5,8 @@
 #include <vector>
 #include <assert.h>
 #include <chrono>
+
+#include "cxxopts.hpp"
 #include "defines.h"
 
 using namespace cv;
@@ -15,6 +17,7 @@ Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
 void performance();
+void webcam ();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
 inline 
@@ -117,46 +120,44 @@ Mat array2mat ( unsigned char array_img[], int row, int col) {
 }
 
 
-int main() {
+int main(int argc, char *argv[]) {
 
-    // create context
-    cudaFree(0); 
+    // https://github.com/jarro2783/cxxopts
+    cxxopts::Options options("CONVOLUTIONer", "By using this program you can compare how faster the convolution is done on GPU vs CPU");
+    try {
 
-    performance();
+      options.add_options()
+        ("h", "Print usage")
+        ("p", "Performance test") 
+        ("w", "Use webcam");
+            
+      auto result = options.parse(argc, argv);
 
-    VideoCapture cap(0); 
-   
-    // Check if camera opened successfully
-    if(!cap.isOpened()){
-        cout << "Error opening video stream or file" << endl;
-        return -1;
-    }
+      if (result.count("h")) {
+        cout << options.help() << endl;
+        return 0;
+      }
+  
+      // create context
+      cudaFree(0); 
+  
+      if (result.count("p")) {
+        performance();
+      } 
+      
+      if (result.count("w")) {
+        webcam();
+      }
 
-    printf("Video stream sucesfully opened!\nPress [ESC] to quit.\n");
-        
-    while(1){
-
-        Mat frame;
-        cap >> frame;
-
-        if (frame.empty()) {
-            break;
-        }
-
-        imshow( "SOBEL OPENCV", sobel_opencv(frame));
-        imshow( "SOBEL GPU", sobel_gpu(frame));
-        imshow( "SOBEL CPU", sobel_cpu(frame));
-
-        if((char)waitKey(25) == 27) {
-            break;
-        }
-       
+      if (result.count("h") == 0 && result.count("p") == 0 && result.count("w") == 0) {
+        cout << options.help() << endl;
+      }
+  
+    } catch (const cxxopts::OptionException& e) {
+      cout << options.help() << endl;
+      return 0;
     }
     
-    // free resources
-    cap.release();
-    destroyAllWindows();
-
     return 0;
 }
 
@@ -229,9 +230,10 @@ Mat sobel_cpu (Mat src_img) {
 
 void performance() {
 
-  Mat img = imread("cap.jpg", 0);
+  Mat img = imread("car.jpg",  IMREAD_COLOR );
   if (img.empty()) {
     cout << "Error opening the file" << endl;
+    exit(-1);
   }
 
   auto start = chrono::system_clock::now();
@@ -250,4 +252,47 @@ void performance() {
   
   cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
 
+  start = chrono::system_clock::now();
+  sobel_opencv(img);
+  end = chrono::system_clock::now();
+  
+  elapsed_seconds = end-start;
+  
+  cout << "[OPENCV] time: " << elapsed_seconds.count() << "s\n";
+
+}
+
+void webcam () {
+  VideoCapture cap(0); 
+   
+  // Check if camera opened successfully
+  if(!cap.isOpened()){
+      cout << "Error opening video stream or file" << endl;
+      exit(-1);
+  }
+
+  printf("Video stream sucesfully opened!\nPress [ESC] to quit.\n");
+      
+  while(1){
+
+      Mat frame;
+      cap >> frame;
+
+      if (frame.empty()) {
+          break;
+      }
+
+      imshow( "SOBEL OPENCV", sobel_opencv(frame));
+      imshow( "SOBEL GPU", sobel_gpu(frame));
+      imshow( "SOBEL CPU", sobel_cpu(frame));
+
+      if((char)waitKey(25) == 27) {
+          break;
+      }
+      
+  }
+  
+  // free resources
+  cap.release();
+  destroyAllWindows();
 }
