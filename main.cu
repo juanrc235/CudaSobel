@@ -5,6 +5,7 @@
 #include <vector>
 #include <assert.h>
 #include <chrono>
+#include <ctime>
 
 #include "cxxopts.hpp"
 #include "defines.h"
@@ -19,7 +20,7 @@ Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
 void performance(string path);
-void webcam ();
+void webcam (int use);
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
 inline 
@@ -137,7 +138,7 @@ int main(int argc, char *argv[]) {
       options.add_options()
         ("h", "Print usage and exit")
         ("p", "Performance test using image specified", cxxopts::value<string>())
-        ("w", "Use webcam video stream as input to both GPU and CPU functions");
+        ("w", "Use webcam video stream [CPU: 0, GPU: 1]", cxxopts::value<int>());
             
       auto result = options.parse(argc, argv);
 
@@ -154,7 +155,7 @@ int main(int argc, char *argv[]) {
       } 
       
       if (result.count("w")) {
-        webcam();
+        webcam( result["w"].as<int>() );
       }
 
       if (result.count("h") == 0 && result.count("p") == 0 && result.count("w") == 0) {
@@ -277,7 +278,7 @@ void performance(string path) {
 
 }
 
-void webcam () {
+void webcam (int use) {
 
   VideoCapture cap(0); 
    
@@ -287,25 +288,37 @@ void webcam () {
       exit(-1);
   }
 
-  printf("Video stream sucesfully opened!\nPress [ESC] to quit.\n");
-      
+  if (use == 0) {
+    cout << "Using CPU function" << endl;
+  } else {
+    cout << "Using GPU function" << endl;
+  }
+  cout << "Video stream sucesfully opened!\nPress [ESC] to quit." << endl;
+
+  Mat frame, img;
+  std::chrono::duration<double> elapsed_seconds;
+  auto start = chrono::system_clock::now();
+  auto end = chrono::system_clock::now();
   while(1){
 
-      Mat frame;
       cap >> frame;
 
-      if (frame.empty()) {
-          break;
+      if (use == 0) {
+        img = sobel_cpu(frame);
+      } else {
+        img = sobel_gpu(frame);
       }
-
-      //imshow( "SOBEL OPENCV", sobel_opencv(frame));
-      imshow( "SOBEL GPU", sobel_gpu(frame));
-      imshow( "SOBEL CPU", sobel_cpu(frame));
-
+      
+      start = chrono::system_clock::now();
+      elapsed_seconds = (start-end);
+      end = start;
+  
+      putText(img, to_string((int)(1/elapsed_seconds.count())), Point(5, 25), FONT_HERSHEY_DUPLEX, 1, Scalar(255, 0, 0), 2);
+      imshow( "SOBEL IMAGE", img);
       if((char)waitKey(25) == 27) {
           break;
       }
-      
+
   }
   
   // free resources
