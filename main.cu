@@ -12,11 +12,13 @@
 using namespace cv;
 using namespace std;
 
+// https://qiita.com/naoyuki_ichimura/items/8c80e67a10d99c2fb53c
+
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
-void performance();
+void performance(string path);
 void webcam ();
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
@@ -72,8 +74,14 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
   
-  dim3 threadsPerBlock(20.0, 20.0, 1);
-  dim3 numBlocks(ceil(rows/20.0), ceil(cols/20.0), 1);
+  /* *
+  * GeForce 920MX 2GB 
+  * Compute capability: 5.0
+  * CUDA core: 256
+  * Threads per block: 1024
+  * */ 
+  dim3 threadsPerBlock(20.0, 20.0);
+  dim3 numBlocks(ceil(rows/20.0), ceil(cols/20.0));
 
   // kernel call
   kernel_conv <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
@@ -127,9 +135,9 @@ int main(int argc, char *argv[]) {
     try {
 
       options.add_options()
-        ("h", "Print usage")
-        ("p", "Performance test") 
-        ("w", "Use webcam");
+        ("h", "Print usage and exit")
+        ("p", "Performance test using image specified", cxxopts::value<string>())
+        ("w", "Use webcam video stream as input to both GPU and CPU functions");
             
       auto result = options.parse(argc, argv);
 
@@ -142,7 +150,7 @@ int main(int argc, char *argv[]) {
       cudaFree(0); 
   
       if (result.count("p")) {
-        performance();
+        performance( result["p"].as<string>() );
       } 
       
       if (result.count("w")) {
@@ -228,20 +236,24 @@ Mat sobel_cpu (Mat src_img) {
   return array2mat(dst_array, src_img.rows, src_img.cols);
 }
 
-void performance() {
+void performance(string path) {
 
-  Mat img = imread("car.jpg",  IMREAD_COLOR );
+  Mat img = imread(path, IMREAD_COLOR);
   if (img.empty()) {
     cout << "Error opening the file" << endl;
     exit(-1);
   }
 
+  cout << "Image: " << path << endl;
+  cout << " - resolution " << img.cols << "x" << img.rows << endl;
+
+  
   auto start = chrono::system_clock::now();
   sobel_cpu(img);
   auto end = chrono::system_clock::now();
   
   std::chrono::duration<double> elapsed_seconds = end-start;
-
+  
   cout << "[CPU] time: " << elapsed_seconds.count() << "s\n";
 
   start = chrono::system_clock::now();
@@ -252,6 +264,8 @@ void performance() {
   
   cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
 
+  exit(0);
+
   start = chrono::system_clock::now();
   sobel_opencv(img);
   end = chrono::system_clock::now();
@@ -260,9 +274,11 @@ void performance() {
   
   cout << "[OPENCV] time: " << elapsed_seconds.count() << "s\n";
 
+
 }
 
 void webcam () {
+
   VideoCapture cap(0); 
    
   // Check if camera opened successfully
@@ -282,7 +298,7 @@ void webcam () {
           break;
       }
 
-      imshow( "SOBEL OPENCV", sobel_opencv(frame));
+      //imshow( "SOBEL OPENCV", sobel_opencv(frame));
       imshow( "SOBEL GPU", sobel_gpu(frame));
       imshow( "SOBEL CPU", sobel_cpu(frame));
 
