@@ -1,4 +1,9 @@
-#include <opencv2/opencv.hpp>
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/videoio.hpp"
+#include <opencv2/video.hpp>
+#include "opencv2/imgcodecs.hpp"
+
 #include <iostream>
 #include <string>
 #include <cmath>
@@ -21,6 +26,7 @@ Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
 void performance(string path);
 void webcam (int use);
+string type2str(int type);
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
 
 inline 
@@ -105,13 +111,13 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
 
 void mat2array (Mat img, unsigned char *array_img) {
 
-    for(int i = 0; i < img.rows; ++i) {
-        for(int j = 0; j < img.cols; ++j) {
-            array_img[i*img.cols + j] = ( img.at<Vec3b>(i, j)[0] + 
-                                          img.at<Vec3b>(i, j)[0] + 
-                                          img.at<Vec3b>(i, j)[0] ) /3 ;
-        }
-    }
+  for(int i = 0; i < img.rows; ++i) {
+      for(int j = 0; j < img.cols; ++j) {
+          array_img[i*img.cols + j] = ( img.at<Vec3b>(i, j)[0] + 
+                                        img.at<Vec3b>(i, j)[1] + 
+                                        img.at<Vec3b>(i, j)[2] ) /3 ;
+      }
+  }
 }
 
 
@@ -213,7 +219,7 @@ Mat sobel_cpu (Mat src_img) {
   unsigned char src_array[src_img.cols*src_img.rows];
 
   mat2array(src_img, src_array);
-
+  
   int width = src_img.cols;
   int height = src_img.rows;
 
@@ -246,8 +252,9 @@ void performance(string path) {
   }
 
   cout << "Image: " << path << endl;
-  cout << " - resolution " << img.cols << "x" << img.rows << endl;
-
+  cout << " - resolution: " << img.cols << "x" << img.rows << endl;
+  cout << " - channels: " << img.channels() << endl;
+  cout << " - type: " << type2str(img.type()) << endl;
   
   auto start = chrono::system_clock::now();
   sobel_cpu(img);
@@ -288,11 +295,18 @@ void webcam (int use) {
       exit(-1);
   }
 
+  cap.set(CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G') );
+  cap.set(CAP_PROP_FRAME_WIDTH, 1920);
+  cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
+
   if (use == 0) {
     cout << "Using CPU function" << endl;
-  } else {
+  } else if (use == 1) {
     cout << "Using GPU function" << endl;
+  } else {
+    cout << "Using OPENCV function" << endl;
   }
+
   cout << "Video stream sucesfully opened!\nPress [ESC] to quit." << endl;
 
   Mat frame, img;
@@ -305,8 +319,12 @@ void webcam (int use) {
 
       if (use == 0) {
         img = sobel_cpu(frame);
-      } else {
+      } else if (use == 1) {
         img = sobel_gpu(frame);
+      } else if (use == 2) {
+        img = sobel_opencv(frame);
+      } else {
+        img = frame;
       }
       
       start = chrono::system_clock::now();
@@ -324,4 +342,27 @@ void webcam (int use) {
   // free resources
   cap.release();
   destroyAllWindows();
+}
+
+string type2str(int type) {
+  string r;
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+  }
+
+  r += "C";
+  r += (chans+'0');
+
+  return r;
 }
