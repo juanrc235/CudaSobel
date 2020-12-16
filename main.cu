@@ -108,33 +108,6 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   cudaFree(dst_dev_img);
 }
 
-
-void mat2array (Mat img, unsigned char *array_img) {
-
-  for(int i = 0; i < img.rows; ++i) {
-      for(int j = 0; j < img.cols; ++j) {
-          array_img[i*img.cols + j] = ( img.at<Vec3b>(i, j)[0] + 
-                                        img.at<Vec3b>(i, j)[1] + 
-                                        img.at<Vec3b>(i, j)[2] ) /3 ;
-      }
-  }
-}
-
-
-Mat array2mat ( unsigned char array_img[], int row, int col) {
-
-    Mat img_m(row, col, CV_8UC1);
-  
-    for(int i = 0; i < row; ++i) {
-        for(int j = 0; j < col; ++j) {
-            img_m.at<uchar>(i, j) = array_img[i*col + j];
-        }
-    }
-
-    return img_m;
-}
-
-
 int main(int argc, char *argv[]) {
 
     // https://github.com/jarro2783/cxxopts
@@ -203,22 +176,26 @@ Mat sobel_opencv(Mat img) {
 
 Mat sobel_gpu (Mat src_img) {
 
-   unsigned char dst_array[src_img.cols*src_img.rows];
-   unsigned char src_array[src_img.cols*src_img.rows];
+  Mat src_img_gray;
+  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY); // to gray_scale
 
-   mat2array(src_img, src_array);
+  uchar dst_array[src_img.cols*src_img.rows];
 
-   kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
+  uchar* src_array = src_img_gray.ptr<uchar>();
+  
+  kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
 
-   return array2mat(dst_array, src_img.rows, src_img.cols);
+  return Mat(src_img.rows, src_img.cols, CV_8UC1, dst_array);
 }
 
 Mat sobel_cpu (Mat src_img) {
 
-  unsigned char dst_array[src_img.cols*src_img.rows];
-  unsigned char src_array[src_img.cols*src_img.rows];
+  Mat src_img_gray;
+  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
 
-  mat2array(src_img, src_array);
+  uchar dst_array[src_img.cols*src_img.rows];
+
+  uchar* src_array = src_img_gray.ptr<uchar>();
   
   int width = src_img.cols;
   int height = src_img.rows;
@@ -240,7 +217,7 @@ Mat sobel_cpu (Mat src_img) {
     }
   }
 
-  return array2mat(dst_array, src_img.rows, src_img.cols);
+  return Mat (src_img.rows, src_img.cols, CV_8UC1, dst_array);
 }
 
 void performance(string path) {
@@ -257,7 +234,7 @@ void performance(string path) {
   cout << " - type: " << type2str(img.type()) << endl;
   
   auto start = chrono::system_clock::now();
-  sobel_cpu(img);
+  Mat rimg1 = sobel_cpu(img);
   auto end = chrono::system_clock::now();
   
   std::chrono::duration<double> elapsed_seconds = end-start;
@@ -265,12 +242,16 @@ void performance(string path) {
   cout << "[CPU] time: " << elapsed_seconds.count() << "s\n";
 
   start = chrono::system_clock::now();
-  sobel_gpu(img);
+  Mat rimg2 = sobel_gpu(img);
   end = chrono::system_clock::now();
   
   elapsed_seconds = end-start;
   
   cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
+  
+  imshow( "RESULT IMAGE CPU", rimg1);
+  imshow( "RESULT IMAGE GPU", rimg2);
+  waitKey(0);
 
   exit(0);
 
