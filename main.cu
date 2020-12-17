@@ -1,8 +1,12 @@
+//#include <opencv2/opencv.hpp>
+
+#include <opencv2/core/core.hpp>
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/videoio.hpp"
 #include <opencv2/video.hpp>
 #include "opencv2/imgcodecs.hpp"
+
 
 #include <iostream>
 #include <string>
@@ -24,7 +28,8 @@ using namespace std;
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
-void performance(string path);
+void performance_img(string path);
+void performance_video (const string path);
 void webcam (int use);
 string type2str(int type);
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
@@ -116,7 +121,8 @@ int main(int argc, char *argv[]) {
 
       options.add_options()
         ("h", "Print usage and exit")
-        ("p", "Performance test using image specified", cxxopts::value<string>())
+        ("pi", "Performance test using image specified", cxxopts::value<string>())
+        ("pv", "Performance test using video specified", cxxopts::value<string>())
         ("w", "Use webcam video stream [CPU: 0, GPU: 1]", cxxopts::value<int>());
             
       auto result = options.parse(argc, argv);
@@ -129,15 +135,19 @@ int main(int argc, char *argv[]) {
       // create context
       cudaFree(0); 
   
-      if (result.count("p")) {
-        performance( result["p"].as<string>() );
+      if (result.count("pi")) {
+        performance_img( result["pi"].as<string>() );
+      } 
+
+      if (result.count("pv")) {
+        performance_video( result["pv"].as<string>() );
       } 
       
       if (result.count("w")) {
         webcam( result["w"].as<int>() );
       }
 
-      if (result.count("h") == 0 && result.count("p") == 0 && result.count("w") == 0) {
+      if (result.count("h") == 0 && result.count("pi") == 0 && result.count("pv") == 0 && result.count("w") == 0) {
         cout << options.help() << endl;
       }
   
@@ -220,7 +230,7 @@ Mat sobel_cpu (Mat src_img) {
   return Mat (src_img.rows, src_img.cols, CV_8UC1, dst_array);
 }
 
-void performance(string path) {
+void performance_img(string path) {
 
   Mat img = imread(path, IMREAD_COLOR);
   if (img.empty()) {
@@ -232,38 +242,58 @@ void performance(string path) {
   cout << " - resolution: " << img.cols << "x" << img.rows << endl;
   cout << " - channels: " << img.channels() << endl;
   cout << " - type: " << type2str(img.type()) << endl;
-  
+
   auto start = chrono::system_clock::now();
-  Mat rimg1 = sobel_cpu(img);
+  sobel_cpu(img);
   auto end = chrono::system_clock::now();
-  
+
   std::chrono::duration<double> elapsed_seconds = end-start;
-  
+
   cout << "[CPU] time: " << elapsed_seconds.count() << "s\n";
 
   start = chrono::system_clock::now();
-  Mat rimg2 = sobel_gpu(img);
+  sobel_gpu(img);
   end = chrono::system_clock::now();
-  
-  elapsed_seconds = end-start;
-  
-  cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
-  
-  imshow( "RESULT IMAGE CPU", rimg1);
-  imshow( "RESULT IMAGE GPU", rimg2);
-  waitKey(0);
 
-  exit(0);
+  elapsed_seconds = end-start;
+
+  cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
 
   start = chrono::system_clock::now();
   sobel_opencv(img);
   end = chrono::system_clock::now();
-  
+
   elapsed_seconds = end-start;
-  
+
   cout << "[OPENCV] time: " << elapsed_seconds.count() << "s\n";
 
+}
 
+void performance_video (const string path) {
+
+  cout << path << endl;
+
+  VideoCapture cap;
+  if (cap.open(path, cv::CAP_ANY) == false) {
+    cout << "Could not open video" << endl;
+    exit(-1);
+  }
+
+  while(1){
+
+    Mat frame;
+    cap >> frame;
+ 
+    imshow( "Video", frame );
+
+    if((char)waitKey(25) == 27) {
+      break;
+    }
+  }
+ 
+  // free resources
+  cap.release();
+  destroyAllWindows(); 
 }
 
 void webcam (int use) {
@@ -276,9 +306,9 @@ void webcam (int use) {
       exit(-1);
   }
 
-  cap.set(CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G') );
-  cap.set(CAP_PROP_FRAME_WIDTH, 1920);
-  cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
+  //cap.set(CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G') );
+  //cap.set(CAP_PROP_FRAME_WIDTH, 640);
+  //cap.set(CAP_PROP_FRAME_HEIGHT, 480);
 
   if (use == 0) {
     cout << "Using CPU function" << endl;
@@ -291,9 +321,6 @@ void webcam (int use) {
   cout << "Video stream sucesfully opened!\nPress [ESC] to quit." << endl;
 
   Mat frame, img;
-  std::chrono::duration<double> elapsed_seconds;
-  auto start = chrono::system_clock::now();
-  auto end = chrono::system_clock::now();
   while(1){
 
       cap >> frame;
@@ -308,11 +335,6 @@ void webcam (int use) {
         img = frame;
       }
       
-      start = chrono::system_clock::now();
-      elapsed_seconds = (start-end);
-      end = start;
-  
-      putText(img, to_string((int)(1/elapsed_seconds.count())), Point(5, 25), FONT_HERSHEY_DUPLEX, 1, Scalar(255, 0, 0), 2);
       imshow( "SOBEL IMAGE", img);
       if((char)waitKey(25) == 27) {
           break;
