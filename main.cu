@@ -269,9 +269,7 @@ void performance_img(string path) {
 
 }
 
-void performance_video (const string path) {
-
-  cout << path << endl;
+void performance_video (string path) {
 
   VideoCapture cap;
   if (cap.open(path, cv::CAP_ANY) == false) {
@@ -279,19 +277,53 @@ void performance_video (const string path) {
     exit(-1);
   }
 
+  cout << "Video: " << path << endl;
+  cout << " - resolution: " << cap.get(CAP_PROP_FRAME_WIDTH) << "x" << cap.get(CAP_PROP_FRAME_HEIGHT) << endl;
+  cout << " - fps: " << cap.get(CAP_PROP_FPS ) << endl;
+  cout << " - nframes: " <<  cap.get(CAP_PROP_FRAME_COUNT) << endl;
+  cout << " - duration: " << cap.get(CAP_PROP_FRAME_COUNT)/cap.get(CAP_PROP_FPS) << " seconds " << endl;
+
+  Mat frame;
+  auto start = chrono::system_clock::now();
   while(1){
 
-    Mat frame;
     cap >> frame;
- 
-    imshow( "Video", frame );
-
-    if((char)waitKey(25) == 27) {
+    if(frame.empty()) {
       break;
     }
-  }
  
-  // free resources
+    sobel_gpu(frame);
+
+  }
+  auto end = chrono::system_clock::now();
+
+
+  std::chrono::duration<double> elapsed_seconds = end-start;
+
+  cout << "[GPU] - time: " << elapsed_seconds.count() << "s\n";
+  cout << "      - fps: " << cap.get(CAP_PROP_FRAME_COUNT)/elapsed_seconds.count() << endl;
+
+  cap.set(CAP_PROP_POS_AVI_RATIO, 0);
+
+  start = chrono::system_clock::now();
+  while(1){
+
+    cap >> frame;
+    if(frame.empty()) {
+      break;
+    }
+ 
+    sobel_cpu(frame);
+
+  }
+  end = chrono::system_clock::now();
+
+
+  elapsed_seconds = end-start;
+
+  cout << "[CPU] - time: " << elapsed_seconds.count() << "s\n";
+  cout << "      - fps: " << cap.get(CAP_PROP_FRAME_COUNT)/elapsed_seconds.count() << endl;
+ 
   cap.release();
   destroyAllWindows(); 
 }
