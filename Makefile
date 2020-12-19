@@ -8,5 +8,5 @@ all:
 	$(CXX) $(CFLAGS) $(LDFLAGS) -gencode arch=compute_50,code=sm_50 -Wno-deprecated-gpu-targets main.cu -o CONVOLUTIONer 
 
 clean:
-	rm CONVOLUTIONer 
+	rm -f CONVOLUTIONer 
 

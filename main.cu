@@ -51,13 +51,16 @@ __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int 
     int y = threadIdx.y + blockIdx.y * blockDim.y;
 
     float dx, dy;
-    if( x > 0 && y > 0 && x < width-1 && y < height-1) { // avoid edges
+    if( x > 1 && y > 1 && x < width-1 && y < height-1) { // avoid edges
 
         dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
              (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
 
         dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
              (-1* src_img[(y+1)*width + (x-1)]) + (-2*src_img[(y+1)*width+x]) + (-1*src_img[(y+1)*width+(x+1)]);
+
+        if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
+        if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
 
         dst_img[y*width + x] = sqrt( (dx*dx) + (dy*dy) );
     }
@@ -94,8 +97,10 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   * CUDA core: 256
   * Threads per block: 1024
   * */ 
-  dim3 threadsPerBlock(20.0, 20.0);
-  dim3 numBlocks(ceil(rows/20.0), ceil(cols/20.0));
+  double blockW = 16.0;
+  double blockH = 16.0;
+  dim3 threadsPerBlock(blockH, blockW);
+  dim3 numBlocks( ceil( rows/blockW ), ceil( cols/blockH ) );
 
   // kernel call
   kernel_conv <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
@@ -352,11 +357,14 @@ void webcam (int use) {
       exit(-1);
   }
 
+  cout << "Webcam: " << endl;
+  cout << " - resolution: " << cap.get(CAP_PROP_FRAME_WIDTH) << "x" << cap.get(CAP_PROP_FRAME_HEIGHT) << endl;
+
   if (use == 0) {
     cout << "Using CPU function" << endl;
   } else if (use == 1) {
     cout << "Using GPU function" << endl;
-  } else {
+  } else if (use == 2) {
     cout << "Using OPENCV function" << endl;
   }
 
@@ -418,7 +426,7 @@ void show_video (string path) {
 
   cout << "Video: " << path << endl;
   cout << " - resolution: " << cap.get(CAP_PROP_FRAME_WIDTH) << "x" << cap.get(CAP_PROP_FRAME_HEIGHT) << endl;
-  cout << " - fps: " << cap.get(CAP_PROP_FPS ) << endl;
+  cout << " - fps: " << cap.get(CAP_PROP_FPS) << endl;
   cout << " - nframes: " <<  cap.get(CAP_PROP_FRAME_COUNT) << endl;
   cout << " - duration: " << cap.get(CAP_PROP_FRAME_COUNT)/cap.get(CAP_PROP_FPS) << " seconds " << endl;
 
@@ -426,16 +434,16 @@ void show_video (string path) {
 
   while(1){
 
-  cap >> frame;
-  if(frame.empty()) {
-    break;
-  }
- 
-  imshow( "SOBEL VIDEO", sobel_gpu(frame));
-
-  if((char)waitKey(25) == 27) {
+    cap >> frame;
+    if(frame.empty()) {
       break;
-  }
+    }
+  
+    imshow( "SOBEL VIDEO", sobel_gpu(frame));
+
+    if((char)waitKey(25) == 27) {
+        break;
+    }
 
   }
 
