@@ -30,6 +30,8 @@ Mat sobel_gpu (Mat src_img);
 Mat sobel_cpu (Mat src_img);
 void performance_img(string path);
 void performance_video (const string path);
+void show_img (string path);
+void show_video (string path);
 void webcam (int use);
 string type2str(int type);
 void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
@@ -123,7 +125,9 @@ int main(int argc, char *argv[]) {
         ("h", "Print usage and exit")
         ("pi", "Performance test using image specified", cxxopts::value<string>())
         ("pv", "Performance test using video specified", cxxopts::value<string>())
-        ("w", "Use webcam video stream [CPU: 0, GPU: 1]", cxxopts::value<int>());
+        ("si", "Show the image specified", cxxopts::value<string>())
+        ("sv", "Show the video specified", cxxopts::value<string>())
+        ("w", "Use webcam video stream [CPU: 0, GPU: 1, OPENCV: 2]", cxxopts::value<int>());
             
       auto result = options.parse(argc, argv);
 
@@ -147,7 +151,17 @@ int main(int argc, char *argv[]) {
         webcam( result["w"].as<int>() );
       }
 
-      if (result.count("h") == 0 && result.count("pi") == 0 && result.count("pv") == 0 && result.count("w") == 0) {
+      if (result.count("si")) {
+        show_img(result["si"].as<string>() );
+      }
+
+      if (result.count("sv")) {
+        show_video(result["sv"].as<string>() );
+      }
+
+      if (result.count("h") == 0 && result.count("pi") == 0 && 
+          result.count("pv") == 0 && result.count("w") == 0 && 
+          result.count("sv") == 0 && result.count("si") == 0) {
         cout << options.help() << endl;
       }
   
@@ -338,10 +352,6 @@ void webcam (int use) {
       exit(-1);
   }
 
-  //cap.set(CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G') );
-  //cap.set(CAP_PROP_FRAME_WIDTH, 640);
-  //cap.set(CAP_PROP_FRAME_HEIGHT, 480);
-
   if (use == 0) {
     cout << "Using CPU function" << endl;
   } else if (use == 1) {
@@ -377,6 +387,61 @@ void webcam (int use) {
   // free resources
   cap.release();
   destroyAllWindows();
+}
+
+void show_img (string path) {
+
+  Mat img = imread(path, IMREAD_COLOR);
+  if (img.empty()) {
+    cout << "Error opening the file" << endl;
+    exit(-1);
+  }
+
+  cout << "Image: " << path << endl;
+  cout << " - resolution: " << img.cols << "x" << img.rows << endl;
+  cout << " - channels: " << img.channels() << endl;
+  cout << " - type: " << type2str(img.type()) << endl;
+
+
+  imshow( "SOBEL IMAGE", sobel_cpu(img));
+  waitKey(0);
+  
+}
+
+void show_video (string path) {
+  
+  VideoCapture cap;
+  if (cap.open(path, cv::CAP_ANY) == false) {
+    cout << "Could not open video" << endl;
+    exit(-1);
+  }
+
+  cout << "Video: " << path << endl;
+  cout << " - resolution: " << cap.get(CAP_PROP_FRAME_WIDTH) << "x" << cap.get(CAP_PROP_FRAME_HEIGHT) << endl;
+  cout << " - fps: " << cap.get(CAP_PROP_FPS ) << endl;
+  cout << " - nframes: " <<  cap.get(CAP_PROP_FRAME_COUNT) << endl;
+  cout << " - duration: " << cap.get(CAP_PROP_FRAME_COUNT)/cap.get(CAP_PROP_FPS) << " seconds " << endl;
+
+  Mat frame;
+
+  while(1){
+
+  cap >> frame;
+  if(frame.empty()) {
+    break;
+  }
+ 
+  imshow( "SOBEL VIDEO", sobel_gpu(frame));
+
+  if((char)waitKey(25) == 27) {
+      break;
+  }
+
+  }
+
+  cap.release();
+  destroyAllWindows(); 
+
 }
 
 string type2str(int type) {
