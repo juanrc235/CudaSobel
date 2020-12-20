@@ -1,4 +1,4 @@
-# CudaSobel
+# CONVOLUTIONer
 
 El objetivo de este programa es aplicar el filtro de Sobel a images y videos. El programa puede mostrar los resultados obtenidos y generar un informe de el tiempo empleado comparando la implementación usando la CPU (un único hilo) y la GPU, usando la API de CUDA.
 
@@ -14,55 +14,55 @@ Ejemplos de uso:
 - `./CONVOLUTIONer -w N`: mostrará la salida de la webcam después de aplicar Sobel.
 
 
-Resultado de `deviceQuery` en mi ordenador:
+
+## Implementación sin uso de memoria compartida
+
+En este caso tenemos un 16x16 hilos por bloque y un número de bloques que depende de la imagen procesada. Para una imagen 4K (3840x2160 píxeles) tendremos 240x135 bloques con 16x16 hilos cada uno. Estos valores (de los hilos por bloque) no son al azar ya que son los que maximizan la utilización de GPU (se puede ver suando el *nvvp*).
+
+A continuación se muestrán los resultados al procesar imagenes de diferente resolución (el tiempo se expresa en ms):
+
+|            | Implementación |        |        | Speed-Up      |            |
+|------------|----------------|--------|--------|---------------|------------|
+|            |       CPU      | OpenCV |   GPU  | CPU vs OpenCV | CPU vs GPU |
+|  Imagen SD |     22.651     |  2.246 |  1.249 |     1.79X     |   18.14X   |
+|  Imagen HD |     62.304     |  4.457 |  3.683 |     1.21X     |   16.91X   |
+| Imagen FHD |     140.341    |  9.570 |  7.717 |     1.24X     |   18.18X   |
+|  Imagen 4K |     536.586    | 38.775 | 24.909 |     1.55X     |   21.54X   |
+
+
+![](cuda.png)
 
 ```
-DeviceQuery Starting...
-
- CUDA Device Query (Runtime API) version (CUDART static linking)
-
-Detected 1 CUDA Capable device(s)
-
-Device 0: "GeForce 920MX"
-  CUDA Driver Version / Runtime Version          11.1 / 11.1
-  CUDA Capability Major/Minor version number:    5.0
-  Total amount of global memory:                 2004 MBytes (2101870592 bytes)
-  ( 2) Multiprocessors, (128) CUDA Cores/MP:     256 CUDA Cores
-  GPU Max Clock rate:                            993 MHz (0.99 GHz)
-  Memory Clock rate:                             900 Mhz
-  Memory Bus Width:                              64-bit
-  L2 Cache Size:                                 1048576 bytes
-  Maximum Texture Dimension Size (x,y,z)         1D=(65536), 2D=(65536, 65536), 3D=(4096, 4096, 4096)
-  Maximum Layered 1D Texture Size, (num) layers  1D=(16384), 2048 layers
-  Maximum Layered 2D Texture Size, (num) layers  2D=(16384, 16384), 2048 layers
-  Total amount of constant memory:               65536 bytes
-  Total amount of shared memory per block:       49152 bytes
-  Total shared memory per multiprocessor:        65536 bytes
-  Total number of registers available per block: 65536
-  Warp size:                                     32
-  Maximum number of threads per multiprocessor:  2048
-  Maximum number of threads per block:           1024
-  Max dimension size of a thread block (x,y,z): (1024, 1024, 64)
-  Max dimension size of a grid size    (x,y,z): (2147483647, 65535, 65535)
-  Maximum memory pitch:                          2147483647 bytes
-  Texture alignment:                             512 bytes
-  Concurrent copy and kernel execution:          Yes with 1 copy engine(s)
-  Run time limit on kernels:                     Yes
-  Integrated GPU sharing Host Memory:            No
-  Support host page-locked memory mapping:       Yes
-  Alignment requirement for Surfaces:            Yes
-  Device has ECC support:                        Disabled
-  Device supports Unified Addressing (UVA):      Yes
-  Device supports Managed Memory:                Yes
-  Device supports Compute Preemption:            No
-  Supports Cooperative Kernel Launch:            No
-  Supports MultiDevice Co-op Kernel Launch:      No
-  Device PCI Domain ID / Bus ID / location ID:   0 / 3 / 0
-  Compute Mode:
-     < Default (multiple host threads can use ::cudaSetDevice() with device simultaneously) >
-
-deviceQuery, CUDA Driver = CUDART, CUDA Driver Version = 11.1, CUDA Runtime Version = 11.1, NumDevs = 1
-Result = PASS
+➜  CudaSobel git:(main) ✗ ./CONVOLUTIONer --pi resources/imageSD.jpg 
+Image: resources/imageSD.jpg
+ - resolution: 640x480
+ - channels: 3
+ - type: 8UC3
+[CPU] time: 22.651ms
+[GPU] time: 1.24968ms
+[OPENCV] time: 2.24651ms
+➜  CudaSobel git:(main) ✗ ./CONVOLUTIONer --pi resources/imgHD.jpg 
+Image: resources/imgHD.jpg
+ - resolution: 1280x720
+ - channels: 3
+ - type: 8UC3
+[CPU] time: 62.3047ms
+[GPU] time: 3.6827ms
+[OPENCV] time: 4.4574ms
+➜  CudaSobel git:(main) ✗ ./CONVOLUTIONer --pi resources/imgFHD.jpg
+Image: resources/imgFHD.jpg
+ - resolution: 1920x1080
+ - channels: 3
+ - type: 8UC3
+[CPU] time: 140.341ms
+[GPU] time: 7.71746ms
+[OPENCV] time: 9.57063ms
+➜  CudaSobel git:(main) ✗ ./CONVOLUTIONer --pi resources/img4K.jpg 
+Image: resources/img4K.jpg
+ - resolution: 3840x2160
+ - channels: 3
+ - type: 8UC3
+[CPU] time: 536.586ms
+[GPU] time: 24.9097ms
+[OPENCV] time: 38.7752ms
 ```
-
-

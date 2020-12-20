@@ -23,6 +23,7 @@ using namespace cv;
 using namespace std;
 
 // https://qiita.com/naoyuki_ichimura/items/8c80e67a10d99c2fb53c
+// https://qiita.com/naoyuki_ichimura/items/519a4b75f57e08619374
 
 // HEADERS
 Mat sobel_opencv(Mat img);
@@ -205,8 +206,10 @@ Mat sobel_opencv(Mat img) {
 
 Mat sobel_gpu (Mat src_img) {
 
-  Mat src_img_gray;
-  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY); // to gray_scale
+  Mat src_img_gray, img_blur;
+
+  GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
+  cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
 
   uchar dst_array[src_img.cols*src_img.rows];
 
@@ -219,15 +222,17 @@ Mat sobel_gpu (Mat src_img) {
 
 Mat sobel_cpu (Mat src_img) {
 
-  Mat src_img_gray;
-  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
+  Mat src_img_gray, img_blur;
+
+  GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
+  cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
 
   uchar dst_array[src_img.cols*src_img.rows];
 
   uchar* src_array = src_img_gray.ptr<uchar>();
   
-  int width = src_img.cols;
-  int height = src_img.rows;
+  int width = src_img_gray.cols;
+  int height = src_img_gray.rows;
 
   float dx, dy;
 
@@ -241,6 +246,9 @@ Mat sobel_cpu (Mat src_img) {
             dy += src_array[(i + x)*width + j + y] * kernel_sy[x + 1][y + 1];
         }
       }
+
+      if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
+      if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
 
       dst_array[i*width + j] = sqrt( (dx*dx) + (dy*dy) );
     }
@@ -268,15 +276,15 @@ void performance_img(string path) {
 
   std::chrono::duration<double> elapsed_seconds = end-start;
 
-  cout << "[CPU] time: " << elapsed_seconds.count() << "s\n";
+  cout << "[CPU] time: " << 1000*elapsed_seconds.count() << "ms\n";
 
   start = chrono::system_clock::now();
-  sobel_gpu(img);
+  Mat i = sobel_gpu(img);
   end = chrono::system_clock::now();
 
   elapsed_seconds = end-start;
 
-  cout << "[GPU] time: " << elapsed_seconds.count() << "s\n";
+  cout << "[GPU] time: " << 1000*elapsed_seconds.count() << "ms\n";
 
   start = chrono::system_clock::now();
   sobel_opencv(img);
@@ -284,7 +292,12 @@ void performance_img(string path) {
 
   elapsed_seconds = end-start;
 
-  cout << "[OPENCV] time: " << elapsed_seconds.count() << "s\n";
+  cout << "[OPENCV] time: " << 1000*elapsed_seconds.count() << "ms\n";
+
+  Mat o;
+  resize(i, o, Size(1280, 720) );
+  imshow("RESULTADO GPU", o );
+  waitKey(0);
 
 }
 
