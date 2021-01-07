@@ -28,7 +28,7 @@ using namespace std;
 // HEADERS
 Mat sobel_opencv(Mat img);
 Mat sobel_gpu (Mat src_img);
-Mat sobel_cpu (Mat src_img);
+void sobel_cpu (Mat src_img);
 void performance_img(string path);
 void performance_video (const string path);
 void show_img (string path);
@@ -73,14 +73,15 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   cudaError_t ret;
   int elements = rows*cols;
   int size = elements*sizeof(unsigned char);
-  unsigned char *src_dev_img, *dst_dev_img;
-
-  // allocate device memory
+  unsigned char *src_dev_img = {0}, *dst_dev_img = {0};
+  
+  // allocate device memory src img
   ret = cudaMalloc((void**)&src_dev_img, size);
   if ( ret != cudaSuccess ) {
     printf("cudaMalloc() [src_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
   }
 
+  // allocate device memory dest img
   ret = cudaMalloc((void**)&dst_dev_img, size);
   if ( ret != cudaSuccess ) {
     printf("cudaMalloc() [dst_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
@@ -123,7 +124,7 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
 
 int main(int argc, char *argv[]) {
 
-    // https://github.com/jarro2783/cxxopts
+    // Argv lib from: https://github.com/jarro2783/cxxopts
     cxxopts::Options options("CONVOLUTIONer", "By using this program you can compare how faster the convolution is done on GPU vs CPU");
     try {
 
@@ -211,31 +212,31 @@ Mat sobel_gpu (Mat src_img) {
   GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
   cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
 
-  uchar dst_array[src_img.cols*src_img.rows];
+  uchar dst_array[src_img.cols*src_img.rows] = {0};
 
-  uchar* src_array = src_img_gray.ptr<uchar>();
+  uchar* src_array = src_img_gray.ptr();
   
   kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
 
-  return Mat(src_img.rows, src_img.cols, CV_8UC1, dst_array);
+  return Mat (src_img.rows, src_img.cols, CV_8U, dst_array);
 }
 
-Mat sobel_cpu (Mat src_img) {
+void sobel_cpu (Mat src_img, Mat dst_img) {
 
-  Mat src_img_gray, img_blur;
+  Mat src_img_gray (src_img.rows, src_img.cols, CV_8UC1);
+  Mat img_blur(src_img.rows, src_img.cols, CV_8UC3);
 
-  GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
-  cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
+  //GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
+  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
 
-  uchar dst_array[src_img.cols*src_img.rows];
+  uchar dst_array[src_img.cols*src_img.rows] = {0};
 
-  uchar* src_array = src_img_gray.ptr<uchar>();
+  uchar *src_array = src_img_gray.ptr();
   
-  int width = src_img_gray.cols;
-  int height = src_img_gray.rows;
+  int width = src_img_gray.cols; // 480
+  int height = src_img_gray.rows; // 640
 
   float dx, dy;
-
   for (int i = 1; i < height - 1; i++) {
     for (int j = 1; j < width - 1; j++) {
 
@@ -247,14 +248,16 @@ Mat sobel_cpu (Mat src_img) {
         }
       }
 
-      if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
-      if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
+      if (dx < 0) { dx = 0; } 
+      if (dx > 255) { dx = 255; }
+      if (dy < 0) { dy = 0; } 
+      if (dy > 255) { dy = 255; }
 
       dst_array[i*width + j] = sqrt( (dx*dx) + (dy*dy) );
     }
   }
 
-  return Mat (src_img.rows, src_img.cols, CV_8UC1, dst_array);
+  memcpy(dst_img.ptr(), dst_array, src_img.cols*src_img.rows); 
 }
 
 void performance_img(string path) {
@@ -271,7 +274,7 @@ void performance_img(string path) {
   cout << " - type: " << type2str(img.type()) << endl;
 
   auto start = chrono::system_clock::now();
-  sobel_cpu(img);
+  //sobel_cpu(img);
   auto end = chrono::system_clock::now();
 
   std::chrono::duration<double> elapsed_seconds = end-start;
@@ -345,7 +348,7 @@ void performance_video (string path) {
       break;
     }
  
-    sobel_cpu(frame);
+    //sobel_cpu(frame);
 
   }
   end = chrono::system_clock::now();
@@ -389,7 +392,7 @@ void webcam (int use) {
       cap >> frame;
 
       if (use == 0) {
-        img = sobel_cpu(frame);
+        //img = sobel_cpu(frame);
       } else if (use == 1) {
         img = sobel_gpu(frame);
       } else if (use == 2) {
@@ -423,10 +426,23 @@ void show_img (string path) {
   cout << " - channels: " << img.channels() << endl;
   cout << " - type: " << type2str(img.type()) << endl;
 
+  Mat sobel_img (img.rows, img.cols, CV_8UC1);
+  sobel_cpu(img, sobel_img);
+  cout << " sobel_img - resolution: " << sobel_img.cols << "x" << sobel_img.rows << endl;
 
-  imshow( "SOBEL IMAGE", sobel_cpu(img));
+  if (img.cols >= 1280) {
+    Mat r_img;
+    resize(sobel_img, r_img, Size(1280, 720), 0, 0);
+    imshow( "SOBEL IMAGE", r_img );
+  } else {
+    imshow( "SOBEL IMAGE", sobel_img);
+  }
+
+  String s_path = "sobel.jpg";
+  imwrite(s_path , sobel_img);
+  cout << "New image saved as: " << s_path  << endl;
+
   waitKey(0);
-  
 }
 
 void show_video (string path) {

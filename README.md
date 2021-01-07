@@ -23,14 +23,15 @@ A continuación se muestrán los resultados al procesar imagenes de diferente re
 
 |            | Implementación |        |        | Speed-Up      |            |
 |------------|----------------|--------|--------|---------------|------------|
-|            |       CPU      | OpenCV |   GPU  | CPU vs OpenCV | CPU vs GPU |
+|            |       CPU      | OpenCV |   GPU  | GPU vs OpenCV | GPU vs CPU |
 |  Imagen SD |     22.651     |  2.246 |  1.249 |     1.79X     |   18.14X   |
 |  Imagen HD |     62.304     |  4.457 |  3.683 |     1.21X     |   16.91X   |
 | Imagen FHD |     140.341    |  9.570 |  7.717 |     1.24X     |   18.18X   |
 |  Imagen 4K |     536.586    | 38.775 | 24.909 |     1.55X     |   21.54X   |
 
 
-![](cuda.png)
+
+### Ejemplo de stdout procesando imagenes
 
 ```
 ➜  CudaSobel git:(main) ✗ ./CONVOLUTIONer --pi resources/imageSD.jpg 
@@ -65,4 +66,19 @@ Image: resources/img4K.jpg
 [CPU] time: 536.586ms
 [GPU] time: 24.9097ms
 [OPENCV] time: 38.7752ms
+```
+
+### Ejemplo de stdout procesando videos
+
+```
+➜  CudaSobel git:(main) ./CONVOLUTIONer --pv resources/videoSD.mp4 
+Video: resources/videoSD.mp4
+ - resolution: 640x360
+ - fps: 30
+ - nframes: 1742
+ - duration: 58.0667 seconds 
+[GPU] - time: 2.6196s
+      - fps: 664.987
+[CPU] - time: 27.8629s
+      - fps: 62.5204
 ```
