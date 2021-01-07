@@ -27,7 +27,7 @@ using namespace std;
 
 // HEADERS
 Mat sobel_opencv(Mat img);
-Mat sobel_gpu (Mat src_img);
+void sobel_gpu (Mat src_img);
 void sobel_cpu (Mat src_img);
 void performance_img(string path);
 void performance_video (const string path);
@@ -44,7 +44,6 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
     assert(salidafuncapi == cudaSuccess);
   }
 }
-
 
 __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
 
@@ -103,7 +102,7 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   double blockH = 16.0;
   dim3 threadsPerBlock(blockH, blockW);
   dim3 numBlocks( ceil( rows/blockW ), ceil( cols/blockH ) );
-
+ 
   // kernel call
   kernel_conv <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
   ret = cudaGetLastError();
@@ -180,7 +179,6 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-
 Mat sobel_opencv(Mat img) {
     Mat src, src_gray, grad_x, grad_y, abs_grad_x, abs_grad_y, grad;
     int ksize = 3;
@@ -205,7 +203,7 @@ Mat sobel_opencv(Mat img) {
     return grad;
 }
 
-Mat sobel_gpu (Mat src_img) {
+void sobel_gpu (Mat src_img, Mat dst_img) {
 
   Mat src_img_gray, img_blur;
 
@@ -218,7 +216,7 @@ Mat sobel_gpu (Mat src_img) {
   
   kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
 
-  return Mat (src_img.rows, src_img.cols, CV_8U, dst_array);
+  memcpy(dst_img.ptr(), dst_array, src_img.cols*src_img.rows); 
 }
 
 void sobel_cpu (Mat src_img, Mat dst_img) {
@@ -226,7 +224,7 @@ void sobel_cpu (Mat src_img, Mat dst_img) {
   Mat src_img_gray (src_img.rows, src_img.cols, CV_8UC1);
   Mat img_blur(src_img.rows, src_img.cols, CV_8UC3);
 
-  //GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
+  GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
   cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
 
   uchar dst_array[src_img.cols*src_img.rows] = {0};
@@ -273,8 +271,9 @@ void performance_img(string path) {
   cout << " - channels: " << img.channels() << endl;
   cout << " - type: " << type2str(img.type()) << endl;
 
+  Mat sobel_img (img.rows, img.cols, CV_8UC1);
   auto start = chrono::system_clock::now();
-  //sobel_cpu(img);
+  sobel_cpu(img, sobel_img);
   auto end = chrono::system_clock::now();
 
   std::chrono::duration<double> elapsed_seconds = end-start;
@@ -282,7 +281,7 @@ void performance_img(string path) {
   cout << "[CPU] time: " << 1000*elapsed_seconds.count() << "ms\n";
 
   start = chrono::system_clock::now();
-  Mat i = sobel_gpu(img);
+  sobel_gpu(img, sobel_img);
   end = chrono::system_clock::now();
 
   elapsed_seconds = end-start;
@@ -298,8 +297,8 @@ void performance_img(string path) {
   cout << "[OPENCV] time: " << 1000*elapsed_seconds.count() << "ms\n";
 
   Mat o;
-  resize(i, o, Size(1280, 720) );
-  imshow("RESULTADO GPU", o );
+  resize(sobel_img, o, Size(1280, 720));
+  imshow("RESULTADO GPU", o);
   waitKey(0);
 
 }
@@ -318,6 +317,7 @@ void performance_video (string path) {
   cout << " - nframes: " <<  cap.get(CAP_PROP_FRAME_COUNT) << endl;
   cout << " - duration: " << cap.get(CAP_PROP_FRAME_COUNT)/cap.get(CAP_PROP_FPS) << " seconds " << endl;
 
+  Mat img (cap.get(CAP_PROP_FRAME_HEIGHT), cap.get(CAP_PROP_FRAME_WIDTH), CV_8UC1);
   Mat frame;
   auto start = chrono::system_clock::now();
   while(1){
@@ -327,7 +327,7 @@ void performance_video (string path) {
       break;
     }
  
-    sobel_gpu(frame);
+    sobel_gpu(frame, img);
 
   }
   auto end = chrono::system_clock::now();
@@ -348,7 +348,7 @@ void performance_video (string path) {
       break;
     }
  
-    //sobel_cpu(frame);
+    sobel_cpu(frame, img);
 
   }
   end = chrono::system_clock::now();
@@ -386,15 +386,16 @@ void webcam (int use) {
 
   cout << "Video stream sucesfully opened!\nPress [ESC] to quit." << endl;
 
-  Mat frame, img;
+  Mat frame;
+  Mat img (cap.get(CAP_PROP_FRAME_HEIGHT), cap.get(CAP_PROP_FRAME_WIDTH), CV_8UC1);
   while(1){
 
       cap >> frame;
 
       if (use == 0) {
-        //img = sobel_cpu(frame);
+        sobel_cpu(frame, img);
       } else if (use == 1) {
-        img = sobel_gpu(frame);
+        sobel_gpu(frame, img);
       } else if (use == 2) {
         img = sobel_opencv(frame);
       } else {
@@ -427,20 +428,15 @@ void show_img (string path) {
   cout << " - type: " << type2str(img.type()) << endl;
 
   Mat sobel_img (img.rows, img.cols, CV_8UC1);
-  sobel_cpu(img, sobel_img);
-  cout << " sobel_img - resolution: " << sobel_img.cols << "x" << sobel_img.rows << endl;
+  sobel_gpu(img, sobel_img);
 
   if (img.cols >= 1280) {
     Mat r_img;
-    resize(sobel_img, r_img, Size(1280, 720), 0, 0);
+    resize(sobel_img, r_img, Size(1280, 720));
     imshow( "SOBEL IMAGE", r_img );
   } else {
     imshow( "SOBEL IMAGE", sobel_img);
   }
-
-  String s_path = "sobel.jpg";
-  imwrite(s_path , sobel_img);
-  cout << "New image saved as: " << s_path  << endl;
 
   waitKey(0);
 }
@@ -459,8 +455,12 @@ void show_video (string path) {
   cout << " - nframes: " <<  cap.get(CAP_PROP_FRAME_COUNT) << endl;
   cout << " - duration: " << cap.get(CAP_PROP_FRAME_COUNT)/cap.get(CAP_PROP_FPS) << " seconds " << endl;
 
-  Mat frame;
-
+  Mat frame, r_img;;
+  Mat img (cap.get(CAP_PROP_FRAME_HEIGHT), cap.get(CAP_PROP_FRAME_WIDTH), CV_8UC1);
+  Size custom_size = img.size();
+  if (img.cols >= 1280) {
+    custom_size = Size (1280, 720);
+  }
   while(1){
 
     cap >> frame;
@@ -468,7 +468,10 @@ void show_video (string path) {
       break;
     }
   
-    imshow( "SOBEL VIDEO", sobel_gpu(frame));
+
+    sobel_gpu(frame, img);
+    resize(img, r_img, custom_size);
+    imshow( "SOBEL VIDEO", r_img);
 
     if((char)waitKey(25) == 27) {
         break;
