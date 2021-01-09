@@ -16,11 +16,16 @@
 #include <chrono>
 #include <ctime>
 
-#define KERNEL_DIM 3
+#define SOBEL_KERNEL_DIM 3
+#define GAUSS_KERNEL_DIM 5
 
-int kernel_gaus[KERNEL_DIM][KERNEL_DIM] = { {1, 2, 1}, {2, 4, 2}, {1, 2, 1} };
-int kernel_sx[KERNEL_DIM][KERNEL_DIM] = { {1, 0, -1}, {2, 0, -2}, {1, 0, -1} };
-int kernel_sy[KERNEL_DIM][KERNEL_DIM] = { {1, 2, 1}, {0, 0, 0}, {-1, -2, -1} };
+__constant__ char kernel_gaus[GAUSS_KERNEL_DIM][GAUSS_KERNEL_DIM] = {{1, 4, 6, 4, 1}, 
+                                                                     {4, 16, 24, 16, 4}, 
+                                                                     {6, 24, 36, 24, 6},
+                                                                     {4, 16, 24, 16, 4}, 
+                                                                     {1, 4, 6, 4, 1} }; 
+int kernel_sx[SOBEL_KERNEL_DIM][SOBEL_KERNEL_DIM] = { {1, 0, -1}, {2, 0, -2}, {1, 0, -1} };
+int kernel_sy[SOBEL_KERNEL_DIM][SOBEL_KERNEL_DIM] = { {1, 2, 1}, {0, 0, 0}, {-1, -2, -1} };
 
 
 #include "cxxopts.hpp"
@@ -30,6 +35,13 @@ using namespace std;
 
 // https://qiita.com/naoyuki_ichimura/items/8c80e67a10d99c2fb53c
 // https://qiita.com/naoyuki_ichimura/items/519a4b75f57e08619374
+
+/* *
+* GeForce 920MX 2GB 
+* Compute capability: 5.0
+* CUDA core: 256
+* Threads per block: 1024
+* */ 
 
 // HEADERS
 Mat sobel_opencv(Mat img);
@@ -41,7 +53,8 @@ void show_img (string path);
 void show_video (string path);
 void webcam (int use);
 string type2str(int type);
-void apply_sobel_gpu(Mat src_img, Mat dst_img, int cols, int rows); 
+void apply_sobel_gpu(Mat src_img, Mat dst_img); 
+void apply_gauss_gpu(Mat src_img, Mat dst_img); 
 
 inline 
 void check(cudaError_t salidafuncapi, const char* nombrefunc) {
@@ -53,28 +66,52 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
 
 __global__ void sobel_gpu(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
 
-    int x = threadIdx.x + blockIdx.x * blockDim.x;
-    int y = threadIdx.y + blockIdx.y * blockDim.y;
+  int x = threadIdx.x + blockIdx.x * blockDim.x;
+  int y = threadIdx.y + blockIdx.y * blockDim.y;
 
-    float dx, dy;
-    if( x > 1 && y > 1 && x < width-1 && y < height-1) { // avoid edges
+  float dx, dy;
+  if( x > 1 || y > 1 || x < width-1 || y < height-1) { // avoid edges
 
-        dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
-             (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
+    dx = (-1* src_img[(y-1)*width + (x-1)]) + (-2*src_img[y*width+(x-1)]) + (-1*src_img[(y+1)*width+(x-1)]) +
+          (    src_img[(y-1)*width + (x+1)]) + ( 2*src_img[y*width+(x+1)]) + (   src_img[(y+1)*width+(x+1)]);
 
-        dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
-             (-1* src_img[(y+1)*width + (x-1)]) + (-2*src_img[(y+1)*width+x]) + (-1*src_img[(y+1)*width+(x+1)]);
+    dy = (    src_img[(y-1)*width + (x-1)]) + ( 2*src_img[(y-1)*width+x]) + (   src_img[(y-1)*width+(x+1)]) +
+          (-1* src_img[(y+1)*width + (x-1)]) + (-2*src_img[(y+1)*width+x]) + (-1*src_img[(y+1)*width+(x+1)]);
 
-        if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
-        if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
+    if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
+    if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
 
-        dst_img[y*width + x] = sqrt( (dx*dx) + (dy*dy) );
-    }
+    dst_img[y*width + x] = (unsigned char) sqrt( (dx*dx) + (dy*dy) );
+  } 
 
 }
 
-void apply_sobel_gpu(Mat src_img, Mat dst_img, int cols, int rows) {
+__global__ void gauss_gpu(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
 
+  int x = threadIdx.x + blockIdx.x * blockDim.x;
+  int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+  float gaus = 0;
+  for (int i = -2; i < GAUSS_KERNEL_DIM - 2; i++) {
+    for (int j = -2; j < GAUSS_KERNEL_DIM - 2; j++) {
+      if( x > 2 || y > 2 || x < width - 2 || y < height - 2 ) {
+        gaus +=  kernel_gaus[i+2][j+2] * src_img[(y+j)*width + (x+i)];
+      }
+    }
+  }
+
+  gaus = gaus/256.0;
+
+  if (gaus < 0) { gaus = 0; } 
+  if (gaus > 255) { gaus = 255; }
+  
+  dst_img[y*width + x] = (unsigned char) gaus;
+
+}
+
+void apply_gauss_gpu(Mat src_img, Mat dst_img) {
+  int rows = src_img.cols;
+  int cols = src_img.rows;
   cudaError_t ret;
   int elements = rows*cols;
   int size = elements*sizeof(unsigned char);
@@ -98,12 +135,54 @@ void apply_sobel_gpu(Mat src_img, Mat dst_img, int cols, int rows) {
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
   
-  /* *
-  * GeForce 920MX 2GB 
-  * Compute capability: 5.0
-  * CUDA core: 256
-  * Threads per block: 1024
-  * */ 
+  dim3 threadsPerBlock(16.0, 16.0);
+  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
+ 
+  // kernel call
+  gauss_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
+  ret = cudaGetLastError();
+  if ( ret != cudaSuccess ) {
+    printf("kernel error: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the result device --> host
+  ret = cudaMemcpy(dst_img.ptr(), dst_dev_img, size, cudaMemcpyDeviceToHost);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() D -> H error: %s\n", cudaGetErrorString(ret));
+  }
+  
+  // free device memory
+  cudaFree(src_dev_img);
+  cudaFree(dst_dev_img);
+}
+
+void apply_sobel_gpu(Mat src_img, Mat dst_img) {
+
+  int rows = src_img.cols;
+  int cols = src_img.rows;
+  cudaError_t ret;
+  int elements = rows*cols;
+  int size = elements*sizeof(unsigned char);
+  unsigned char *src_dev_img = {0}, *dst_dev_img = {0};
+  
+  // allocate device memory src img
+  ret = cudaMalloc((void**)&src_dev_img, size);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [src_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  // allocate device memory dest img
+  ret = cudaMalloc((void**)&dst_dev_img, size);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [dst_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the data host --> device
+  ret = cudaMemcpy(src_dev_img, src_img.ptr(), size, cudaMemcpyHostToDevice);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
+  }
+  
   dim3 threadsPerBlock(16.0, 16.0);
   dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
  
@@ -209,12 +288,13 @@ Mat sobel_opencv(Mat img) {
 
 void sobel_gpu (Mat src_img, Mat dst_img) {
 
-  Mat src_img_gray, img_blur;
+  Mat src_img_gray, img_blur(src_img.rows, src_img.cols, CV_8UC1);
 
-  GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
-  cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
-  
-  apply_sobel_gpu(src_img_gray, dst_img, src_img.rows, src_img.cols);
+  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
+
+  apply_gauss_gpu(src_img_gray, img_blur);
+
+  apply_sobel_gpu(img_blur, dst_img);
 }
 
 void sobel_cpu (Mat src_img, Mat dst_img) {
@@ -237,8 +317,8 @@ void sobel_cpu (Mat src_img, Mat dst_img) {
     for (int j = 1; j < width - 1; j++) {
 
       dx = 0; dy = 0;
-      for (int x = -1; x < KERNEL_DIM - 1; x++) {
-        for (int y = -1; y < KERNEL_DIM - 1; y++) {
+      for (int x = -1; x < SOBEL_KERNEL_DIM - 1; x++) {
+        for (int y = -1; y < SOBEL_KERNEL_DIM - 1; y++) {
             dx += src_array[(i + x)*width + j + y] * kernel_sx[x + 1][y + 1];
             dy += src_array[(i + x)*width + j + y] * kernel_sy[x + 1][y + 1];
         }
