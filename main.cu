@@ -16,8 +16,14 @@
 #include <chrono>
 #include <ctime>
 
+#define KERNEL_DIM 3
+
+int kernel_gaus[KERNEL_DIM][KERNEL_DIM] = { {1, 2, 1}, {2, 4, 2}, {1, 2, 1} };
+int kernel_sx[KERNEL_DIM][KERNEL_DIM] = { {1, 0, -1}, {2, 0, -2}, {1, 0, -1} };
+int kernel_sy[KERNEL_DIM][KERNEL_DIM] = { {1, 2, 1}, {0, 0, 0}, {-1, -2, -1} };
+
+
 #include "cxxopts.hpp"
-#include "defines.h"
 
 using namespace cv;
 using namespace std;
@@ -35,7 +41,7 @@ void show_img (string path);
 void show_video (string path);
 void webcam (int use);
 string type2str(int type);
-void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows); 
+void apply_sobel_gpu(Mat src_img, Mat dst_img, int cols, int rows); 
 
 inline 
 void check(cudaError_t salidafuncapi, const char* nombrefunc) {
@@ -45,7 +51,7 @@ void check(cudaError_t salidafuncapi, const char* nombrefunc) {
   }
 }
 
-__global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
+__global__ void sobel_gpu(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
 
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -67,7 +73,7 @@ __global__ void kernel_conv(unsigned char* src_img, unsigned char* dst_img, int 
 
 }
 
-void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, int rows) {
+void apply_sobel_gpu(Mat src_img, Mat dst_img, int cols, int rows) {
 
   cudaError_t ret;
   int elements = rows*cols;
@@ -87,7 +93,7 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   }
 
   // copy the data host --> device
-  ret = cudaMemcpy(src_dev_img, src_img, size, cudaMemcpyHostToDevice);
+  ret = cudaMemcpy(src_dev_img, src_img.ptr(), size, cudaMemcpyHostToDevice);
   if ( ret != cudaSuccess ) {
     printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
   }
@@ -98,20 +104,18 @@ void kernel_wrapper(unsigned char *src_img, unsigned char *dst_img, int cols, in
   * CUDA core: 256
   * Threads per block: 1024
   * */ 
-  double blockW = 16.0;
-  double blockH = 16.0;
-  dim3 threadsPerBlock(blockH, blockW);
-  dim3 numBlocks( ceil( rows/blockW ), ceil( cols/blockH ) );
+  dim3 threadsPerBlock(16.0, 16.0);
+  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
  
   // kernel call
-  kernel_conv <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
+  sobel_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
   ret = cudaGetLastError();
   if ( ret != cudaSuccess ) {
     printf("kernel error: %s\n", cudaGetErrorString(ret));
   }
 
   // copy the result device --> host
-  ret = cudaMemcpy(dst_img, dst_dev_img, size, cudaMemcpyDeviceToHost);
+  ret = cudaMemcpy(dst_img.ptr(), dst_dev_img, size, cudaMemcpyDeviceToHost);
   if ( ret != cudaSuccess ) {
     printf("cudaMemcpy() D -> H error: %s\n", cudaGetErrorString(ret));
   }
@@ -209,14 +213,8 @@ void sobel_gpu (Mat src_img, Mat dst_img) {
 
   GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
   cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
-
-  uchar dst_array[src_img.cols*src_img.rows] = {0};
-
-  uchar* src_array = src_img_gray.ptr();
   
-  kernel_wrapper(src_array, dst_array, src_img.rows, src_img.cols);
-
-  memcpy(dst_img.ptr(), dst_array, src_img.cols*src_img.rows); 
+  apply_sobel_gpu(src_img_gray, dst_img, src_img.rows, src_img.cols);
 }
 
 void sobel_cpu (Mat src_img, Mat dst_img) {
@@ -483,6 +481,7 @@ void show_video (string path) {
   destroyAllWindows(); 
 
 }
+
 
 string type2str(int type) {
   string r;
