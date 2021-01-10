@@ -16,6 +16,8 @@
 #include <chrono>
 #include <ctime>
 
+#include "cxxopts.hpp"
+
 #define SOBEL_KERNEL_DIM 3
 #define GAUSS_KERNEL_DIM 5
 
@@ -28,13 +30,8 @@ int kernel_sx[SOBEL_KERNEL_DIM][SOBEL_KERNEL_DIM] = { {1, 0, -1}, {2, 0, -2}, {1
 int kernel_sy[SOBEL_KERNEL_DIM][SOBEL_KERNEL_DIM] = { {1, 2, 1}, {0, 0, 0}, {-1, -2, -1} };
 
 
-#include "cxxopts.hpp"
-
 using namespace cv;
 using namespace std;
-
-// https://qiita.com/naoyuki_ichimura/items/8c80e67a10d99c2fb53c
-// https://qiita.com/naoyuki_ichimura/items/519a4b75f57e08619374
 
 /* *
 * GeForce 920MX 2GB 
@@ -117,8 +114,11 @@ __global__ void grayscale_gpu(unsigned char* src_img, unsigned char* dst_img, in
   float grayscale = 0;
   
   grayscale = 0.144f*src_img[y*width*3 + (3*x)] + 0.587f*src_img[y*width*3 + (3*x) + 1] + 0.299f*src_img[y*width*3 + (3*x) + 2];
+
+  if (grayscale < 0) { grayscale = 0.0; }
+  if (grayscale > 255) { grayscale = 255.0; }
   
-  dst_img[y*width + x] = (unsigned char) grayscale;
+  dst_img[y*width + x] = static_cast<unsigned char>(grayscale);
 
 }
 
@@ -149,7 +149,7 @@ void apply_gauss_gpu(Mat src_img, Mat dst_img) {
   }
   
   dim3 threadsPerBlock(16.0, 16.0);
-  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
+  dim3 numBlocks( ceil( rows/16.0 ), ceil( cols/16.0 ) );
  
   // kernel call
   gauss_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
@@ -197,7 +197,7 @@ void apply_sobel_gpu(Mat src_img, Mat dst_img) {
   }
   
   dim3 threadsPerBlock(16.0, 16.0);
-  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
+  dim3 numBlocks( ceil( rows/16.0 ), ceil( cols/16.0) );
  
   // kernel call
   sobel_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
@@ -218,8 +218,8 @@ void apply_sobel_gpu(Mat src_img, Mat dst_img) {
 }
 
 void apply_grayscale_gpu(Mat src_img, Mat dst_img) {
-  int rows = src_img.cols;
-  int cols = src_img.rows;
+  int cols = src_img.cols;
+  int rows = src_img.rows;
   cudaError_t ret;
   int elements = rows*cols;
   int size_in = 3*elements*sizeof(unsigned char);
@@ -245,10 +245,10 @@ void apply_grayscale_gpu(Mat src_img, Mat dst_img) {
   }
   
   dim3 threadsPerBlock(16.0, 16.0);
-  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
+  dim3 numBlocks( ceil( cols/16.0 ), ceil( rows/16.0) );
  
   // kernel call
-  grayscale_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
+  grayscale_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, cols, rows);
   ret = cudaGetLastError();
   if ( ret != cudaSuccess ) {
     printf("kernel error: %s\n", cudaGetErrorString(ret));
