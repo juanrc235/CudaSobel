@@ -43,15 +43,14 @@ ax1.plot(ntest, gpu_times, label='Datos')
 ax1.plot(ntest, media, linestyle='--', label='Media')
 ax1.set_title('Tiempos en GPU')
 ax1.set_ylabel('Tiempo (ms)')
-ax1.set_xlabel('Número de test')
+ax1.set_xlabel('Número de tests')
 
 media = [sum(cpu_times)/(i+1)]*len(ntest)
 ax2.plot(ntest, cpu_times, label='Datos')
 ax2.plot(ntest, media, linestyle='--', label='Media')
 ax2.set_title('Tiempos en CPU')
 ax2.set_ylabel('Tiempo (ms)')
-ax2.set_xlabel('Número de test')
-
+ax2.set_xlabel('Número de tests')
 
 ax1.legend()
 plt.show()
