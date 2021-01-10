@@ -44,7 +44,6 @@ using namespace std;
 * */ 
 
 // HEADERS
-Mat sobel_opencv(Mat img);
 void sobel_gpu (Mat src_img);
 void sobel_cpu (Mat src_img);
 void performance_img(string path);
@@ -55,6 +54,7 @@ void webcam (int use);
 string type2str(int type);
 void apply_sobel_gpu(Mat src_img, Mat dst_img); 
 void apply_gauss_gpu(Mat src_img, Mat dst_img); 
+void apply_grayscale_gpu(Mat src_img, Mat dst_img); 
 
 inline 
 void check(cudaError_t salidafuncapi, const char* nombrefunc) {
@@ -106,6 +106,19 @@ __global__ void gauss_gpu(unsigned char* src_img, unsigned char* dst_img, int wi
   if (gaus > 255) { gaus = 255; }
   
   dst_img[y*width + x] = (unsigned char) gaus;
+
+}
+
+__global__ void grayscale_gpu(unsigned char* src_img, unsigned char* dst_img, int width, int height) {
+
+  int x = threadIdx.x + blockIdx.x * blockDim.x;
+  int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+  float grayscale = 0;
+  
+  grayscale = 0.144f*src_img[y*width*3 + (3*x)] + 0.587f*src_img[y*width*3 + (3*x) + 1] + 0.299f*src_img[y*width*3 + (3*x) + 2];
+  
+  dst_img[y*width + x] = (unsigned char) grayscale;
 
 }
 
@@ -204,6 +217,54 @@ void apply_sobel_gpu(Mat src_img, Mat dst_img) {
   cudaFree(dst_dev_img);
 }
 
+void apply_grayscale_gpu(Mat src_img, Mat dst_img) {
+  int rows = src_img.cols;
+  int cols = src_img.rows;
+  cudaError_t ret;
+  int elements = rows*cols;
+  int size_in = 3*elements*sizeof(unsigned char);
+  int size_out = elements*sizeof(unsigned char);
+  unsigned char *src_dev_img = {0}, *dst_dev_img = {0};
+  
+  // allocate device memory src img
+  ret = cudaMalloc((void**)&src_dev_img, size_in);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [src_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  // allocate device memory dest img
+  ret = cudaMalloc((void**)&dst_dev_img, size_out);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMalloc() [dst_dev_img] error in device memory allocation: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the data host --> device
+  ret = cudaMemcpy(src_dev_img, src_img.ptr(), size_in, cudaMemcpyHostToDevice);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() H -> D error: %s\n", cudaGetErrorString(ret));
+  }
+  
+  dim3 threadsPerBlock(16.0, 16.0);
+  dim3 numBlocks( ceil( rows/threadsPerBlock.x ), ceil( cols/threadsPerBlock.y) );
+ 
+  // kernel call
+  grayscale_gpu <<<numBlocks, threadsPerBlock>>> (src_dev_img, dst_dev_img, rows, cols);
+  ret = cudaGetLastError();
+  if ( ret != cudaSuccess ) {
+    printf("kernel error: %s\n", cudaGetErrorString(ret));
+  }
+
+  // copy the result device --> host
+  ret = cudaMemcpy(dst_img.ptr(), dst_dev_img, size_out, cudaMemcpyDeviceToHost);
+  if ( ret != cudaSuccess ) {
+    printf("cudaMemcpy() D -> H error: %s\n", cudaGetErrorString(ret));
+  }
+  
+  // free device memory
+  cudaFree(src_dev_img);
+  cudaFree(dst_dev_img);
+}
+
 int main(int argc, char *argv[]) {
 
     // Argv lib from: https://github.com/jarro2783/cxxopts
@@ -216,7 +277,7 @@ int main(int argc, char *argv[]) {
         ("pv", "Performance test using video specified", cxxopts::value<string>())
         ("si", "Show the image specified", cxxopts::value<string>())
         ("sv", "Show the video specified", cxxopts::value<string>())
-        ("w", "Use webcam video stream [CPU: 0, GPU: 1, OPENCV: 2]", cxxopts::value<int>());
+        ("w", "Use webcam video stream [CPU: 0, GPU: 1, No filter: 2]", cxxopts::value<int>());
             
       auto result = options.parse(argc, argv);
 
@@ -262,38 +323,15 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-Mat sobel_opencv(Mat img) {
-    Mat src, src_gray, grad_x, grad_y, abs_grad_x, abs_grad_y, grad;
-    int ksize = 3;
-    int scale = 1;
-    int delta = 0;
-    int ddepth = CV_16S;
-
-    // apply Gaussian blur
-    GaussianBlur(img, src, Size(3, 3), 0, 0, BORDER_DEFAULT);
-
-    // to gray scale
-    cvtColor(img, src_gray, COLOR_BGR2GRAY);
-
-    Sobel(src_gray, grad_x, ddepth, 1, 0, ksize, scale, delta, BORDER_DEFAULT);
-    Sobel(src_gray, grad_y, ddepth, 0, 1, ksize, scale, delta, BORDER_DEFAULT);
-
-    convertScaleAbs(grad_x, abs_grad_x);
-    convertScaleAbs(grad_y, abs_grad_y);
-
-    addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
-
-    return grad;
-}
-
 void sobel_gpu (Mat src_img, Mat dst_img) {
 
-  Mat src_img_gray, img_blur(src_img.rows, src_img.cols, CV_8UC1);
+  Mat src_img_gray(src_img.rows, src_img.cols, CV_8UC1);
+  Mat img_blur(src_img.rows, src_img.cols, CV_8UC1);
 
-  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
+  apply_grayscale_gpu(src_img, src_img_gray);
 
   apply_gauss_gpu(src_img_gray, img_blur);
-
+ 
   apply_sobel_gpu(img_blur, dst_img);
 }
 
@@ -366,19 +404,7 @@ void performance_img(string path) {
 
   cout << "[GPU] time: " << 1000*elapsed_seconds.count() << "ms\n";
 
-  start = chrono::system_clock::now();
-  sobel_opencv(img);
-  end = chrono::system_clock::now();
-
-  elapsed_seconds = end-start;
-
-  cout << "[OPENCV] time: " << 1000*elapsed_seconds.count() << "ms\n";
-
-  Mat o;
-  resize(sobel_img, o, Size(1280, 720));
-  imshow("RESULTADO GPU", o);
   waitKey(0);
-
 }
 
 void performance_video (string path) {
@@ -458,9 +484,7 @@ void webcam (int use) {
     cout << "Using CPU function" << endl;
   } else if (use == 1) {
     cout << "Using GPU function" << endl;
-  } else if (use == 2) {
-    cout << "Using OPENCV function" << endl;
-  }
+  } 
 
   cout << "Video stream sucesfully opened!\nPress [ESC] to quit." << endl;
 
@@ -474,8 +498,6 @@ void webcam (int use) {
         sobel_cpu(frame, img);
       } else if (use == 1) {
         sobel_gpu(frame, img);
-      } else if (use == 2) {
-        img = sobel_opencv(frame);
       } else {
         img = frame;
       }
@@ -561,7 +583,6 @@ void show_video (string path) {
   destroyAllWindows(); 
 
 }
-
 
 string type2str(int type) {
   string r;
