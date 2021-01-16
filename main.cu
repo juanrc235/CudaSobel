@@ -45,7 +45,7 @@ void sobel_gpu (Mat src_img);
 void sobel_cpu (Mat src_img);
 void performance_img(string path);
 void performance_video (const string path);
-void show_img (string path);
+void show_img (string path, int mode);
 void show_video (string path);
 void webcam (int use);
 string type2str(int type);
@@ -78,7 +78,7 @@ __global__ void sobel_gpu(unsigned char* src_img, unsigned char* dst_img, int wi
     if (dx < 0) { dx = 0; } if (dx > 255) { dx = 255; }
     if (dy < 0) { dy = 0; } if (dy > 255) { dy = 255; }
 
-    dst_img[y*width + x] = (unsigned char) sqrt( (dx*dx) + (dy*dy) );
+    dst_img[y*width + x] = static_cast<unsigned char>(sqrt( (dx*dx) + (dy*dy) ) );
   } 
 
 }
@@ -102,7 +102,7 @@ __global__ void gauss_gpu(unsigned char* src_img, unsigned char* dst_img, int wi
   if (gaus < 0) { gaus = 0; } 
   if (gaus > 255) { gaus = 255; }
   
-  dst_img[y*width + x] = (unsigned char) gaus;
+  dst_img[y*width + x] = static_cast<unsigned char>(gaus);
 
 }
 
@@ -275,8 +275,9 @@ int main(int argc, char *argv[]) {
         ("h", "Print usage and exit")
         ("pi", "Performance test using image specified", cxxopts::value<string>())
         ("pv", "Performance test using video specified", cxxopts::value<string>())
-        ("si", "Show the image specified", cxxopts::value<string>())
-        ("sv", "Show the video specified", cxxopts::value<string>())
+        ("si_gpu", "Show the image specified (GPU)", cxxopts::value<string>())
+        ("si_cpu", "Show the image specified (CPU)", cxxopts::value<string>())
+        ("sv", "Show the video specified (GPU)", cxxopts::value<string>())
         ("w", "Use webcam video stream [CPU: 0, GPU: 1, No filter: 2]", cxxopts::value<int>());
             
       auto result = options.parse(argc, argv);
@@ -301,8 +302,12 @@ int main(int argc, char *argv[]) {
         webcam( result["w"].as<int>() );
       }
 
-      if (result.count("si")) {
-        show_img(result["si"].as<string>() );
+      if (result.count("si_cpu")) {
+        show_img(result["si_cpu"].as<string>(), 0);
+      }
+
+      if (result.count("si_gpu")) {
+        show_img(result["si_gpu"].as<string>(), 1);
       }
 
       if (result.count("sv")) {
@@ -311,7 +316,8 @@ int main(int argc, char *argv[]) {
 
       if (result.count("h") == 0 && result.count("pi") == 0 && 
           result.count("pv") == 0 && result.count("w") == 0 && 
-          result.count("sv") == 0 && result.count("si") == 0) {
+          result.count("sv") == 0 && result.count("si_cpu") == 0 &&
+          result.count("si_gpu") == 0 ) {
         cout << options.help() << endl;
       }
   
@@ -341,14 +347,12 @@ void sobel_cpu (Mat src_img, Mat dst_img) {
   Mat img_blur(src_img.rows, src_img.cols, CV_8UC3);
 
   GaussianBlur(src_img, img_blur, Size(3, 3), 0, 0, BORDER_DEFAULT);
-  cvtColor(src_img, src_img_gray, COLOR_BGR2GRAY);
-
-  uchar dst_array[src_img.cols*src_img.rows] = {0};
-
+  cvtColor(img_blur, src_img_gray, COLOR_BGR2GRAY);
+   
   uchar *src_array = src_img_gray.ptr();
-  
-  int width = src_img_gray.cols; // 480
-  int height = src_img_gray.rows; // 640
+
+  int width = src_img_gray.cols; 
+  int height = src_img_gray.rows; 
 
   float dx, dy;
   for (int i = 1; i < height - 1; i++) {
@@ -367,11 +371,10 @@ void sobel_cpu (Mat src_img, Mat dst_img) {
       if (dy < 0) { dy = 0; } 
       if (dy > 255) { dy = 255; }
 
-      dst_array[i*width + j] = sqrt( (dx*dx) + (dy*dy) );
+      dst_img.ptr()[i*width + j] =  static_cast<unsigned char>(sqrt( (dx*dx) + (dy*dy) ));
     }
   }
 
-  memcpy(dst_img.ptr(), dst_array, src_img.cols*src_img.rows); 
 }
 
 void performance_img(string path) {
@@ -514,7 +517,7 @@ void webcam (int use) {
   destroyAllWindows();
 }
 
-void show_img (string path) {
+void show_img (string path, int mode) {
 
   Mat img = imread(path, IMREAD_COLOR);
   if (img.empty()) {
@@ -528,8 +531,12 @@ void show_img (string path) {
   cout << " - type: " << type2str(img.type()) << endl;
 
   Mat sobel_img (img.rows, img.cols, CV_8UC1);
-  sobel_gpu(img, sobel_img);
-
+  if (mode == 0) {
+    sobel_cpu(img, sobel_img);
+  } else if (mode == 1) {
+    sobel_gpu(img, sobel_img);
+  }
+  
   if (img.cols >= 1280) {
     Mat r_img;
     resize(sobel_img, r_img, Size(1280, 720));
