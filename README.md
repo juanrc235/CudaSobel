@@ -1,4 +1,4 @@
-# Procesamiento de Im ́agenes
+# Procesamiento de Imágenes
 
 El objetivo de este programa es aplicar el filtro de Sobel a images y videos. El programa puede mostrar los resultados obtenidos y generar un informe de el tiempo empleado comparando la implementación usando la CPU (un único hilo) y la GPU, usando la API de CUDA.
 
